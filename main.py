@@ -210,6 +210,7 @@ async def trading_loop():
             amount_eth = target_amount_btc / current_price
 
             executed = False
+            logger.info(f"Balances - BTC: {btc_free:.6f}, ETH: {eth_free:.6f}")
             if signal == 'BUY':
                 cost_btc = amount_eth * current_price
                 if btc_free > cost_btc:

@@ -1,5 +1,8 @@
 import ta
 import pandas as pd
+import logging
+
+logger = logging.getLogger(__name__)
 
 class Coffin299Strategy:
     def __init__(self, rsi_period=14, rsi_overbought=70, rsi_oversold=30, bb_period=20, bb_std=2.0):
@@ -29,6 +32,8 @@ class Coffin299Strategy:
         current_rsi = df['rsi'].iloc[-1]
         current_bb_lower = df['bb_lower'].iloc[-1]
         current_bb_upper = df['bb_upper'].iloc[-1]
+        
+        logger.info(f"Price: {current_price:.6f} | RSI: {current_rsi:.2f} | BB_L: {current_bb_lower:.6f} | BB_U: {current_bb_upper:.6f}")
 
         # Logic
         # Buy Signal: Price <= Lower BB AND RSI <= Oversold
@@ -38,5 +43,5 @@ class Coffin299Strategy:
         # Sell Signal: Price >= Upper BB AND RSI >= Overbought
         elif current_price >= current_bb_upper and current_rsi >= self.rsi_overbought:
             return 'SELL'
-        
+            
         return None
