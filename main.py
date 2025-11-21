@@ -1,25 +1,165 @@
+import asyncio
+import yaml
+import logging
+import datetime
+import os
+import discord
+import webbrowser
 import uvicorn
+from discord.ext import tasks, commands
+from dotenv import load_dotenv
+
+from utils.binance_client import BinanceClient
+from utils.discord_notify import DiscordEmbedGenerator
+from strategies.coffin299 import Coffin299Strategy
 from web.server import app, broadcast_update
 
-# ... (Existing imports)
+# Setup Logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger("BinanceTrader")
 
-# ... (Existing code)
+def load_config():
+    if not os.path.exists('config.yaml'):
+        if os.path.exists('config.default.yaml'):
+            import shutil
+            shutil.copy('config.default.yaml', 'config.yaml')
+            logger.info("Created config.yaml from default. Please edit it.")
+        else:
+            logger.error("config.default.yaml not found!")
+            exit(1)
+            
+    with open('config.yaml', 'r') as f:
+        return yaml.safe_load(f)
+
+config = load_config()
+load_dotenv()
+
+# Discord Bot Setup
+intents = discord.Intents.default()
+bot = commands.Bot(command_prefix='!', intents=intents)
+
+# Global State
+binance = None
+strategy = None
+last_summary_time = datetime.datetime.now()
+last_hour_value_jpy = 0
+start_value_jpy = 0
+initial_setup_done = False
+
+@bot.event
+async def on_ready():
+    logger.info(f'Logged in as {bot.user} (ID: {bot.user.id})')
+    if not trading_loop.is_running():
+        trading_loop.start()
 
 @tasks.loop(seconds=config['system']['check_interval'])
 async def trading_loop():
     global last_summary_time, last_hour_value_jpy, start_value_jpy, initial_setup_done, binance, strategy
 
     try:
-        # ... (Initialization logic)
+        if not binance:
+            binance = BinanceClient(
+                config['binance']['api_key'],
+                config['binance']['api_secret'],
+                testnet=config['binance']['testnet'],
+                paper_trading=config['trading']['dry_run'],
+                paper_initial_jpy=config['trading'].get('dry_run_initial_capital_jpy', 10000)
+            )
+            await binance.initialize()
+            
+            strategy = Coffin299Strategy(
+                rsi_period=config['trading']['strategy']['rsi_period'],
+                rsi_overbought=config['trading']['strategy']['rsi_overbought'],
+                rsi_oversold=config['trading']['strategy']['rsi_oversold'],
+                bb_period=config['trading']['strategy']['bb_period'],
+                bb_std=config['trading']['strategy']['bb_std']
+            )
 
-        # ... (Initial Value Setup)
+        symbol = config['trading']['symbol']
+        base_currency = symbol.split('/')[0]
+        quote_currency = symbol.split('/')[1]
+        trade_amount_jpy = config['trading']['trade_amount_jpy']
+        dry_run = config['trading']['dry_run']
+
+        # Initial Value Setup (Run once)
+        if not initial_setup_done:
+            btc_jpy_ticker = await binance.get_ticker("BTC/JPY")
+            btc_jpy = btc_jpy_ticker['last'] if btc_jpy_ticker else 0
+            
+            eth_bal, _ = await binance.get_balance(base_currency)
+            btc_bal, _ = await binance.get_balance(quote_currency)
+            ticker = await binance.get_ticker(symbol)
+            current_price = ticker['last'] if ticker else 0
+            
+            total_btc_value = (eth_bal * current_price) + btc_bal
+            start_value_jpy = total_btc_value * btc_jpy
+            last_hour_value_jpy = start_value_jpy
+            initial_setup_done = True
+            logger.info(f"Initial Value: ¥{start_value_jpy:,.0f}")
+
+            # Send Startup Summary
+            mode_str = "Dry Run (Paper)" if dry_run else "Live Trading"
+            embed = DiscordEmbedGenerator.create_wallet_summary_embed(
+                start_value_jpy, 0, 0, title=f"🚀 Bot Started ({mode_str})"
+            )
+            channel = bot.get_channel(config['discord']['summary_channel_id'])
+            if channel:
+                await channel.send(embed=embed)
+            else:
+                logger.error("Summary Channel ID not found or bot cannot access it.")
 
         # Broadcast Status Update
         if initial_setup_done:
-            # Recalculate current value for display
             ticker = await binance.get_ticker(symbol)
             current_price = ticker['last']
-        # ... (Hourly Summary Logic)
+            btc_jpy_ticker = await binance.get_ticker("BTC/JPY")
+            btc_jpy = btc_jpy_ticker['last']
+            
+            eth_bal, _ = await binance.get_balance(base_currency)
+            btc_bal, _ = await binance.get_balance(quote_currency)
+            
+            current_total_btc = (eth_bal * current_price) + btc_bal
+            current_value_jpy = current_total_btc * btc_jpy
+            total_change = current_value_jpy - start_value_jpy
+
+            await broadcast_update({
+                "type": "status",
+                "payload": {
+                    "total_value_jpy": current_value_jpy,
+                    "total_change_jpy": total_change
+                }
+            })
+
+        # 1. Time Check for Hourly Summary
+        now = datetime.datetime.now()
+        if (now - last_summary_time).total_seconds() >= 3600:
+            ticker = await binance.get_ticker(symbol)
+            current_price = ticker['last']
+            btc_jpy_ticker = await binance.get_ticker("BTC/JPY")
+            btc_jpy = btc_jpy_ticker['last']
+            
+            eth_bal, _ = await binance.get_balance(base_currency)
+            btc_bal, _ = await binance.get_balance(quote_currency)
+            
+            current_total_btc = (eth_bal * current_price) + btc_bal
+            current_value_jpy = current_total_btc * btc_jpy
+            
+            change_1h = current_value_jpy - last_hour_value_jpy
+            total_change = current_value_jpy - start_value_jpy
+            
+            embed = DiscordEmbedGenerator.create_wallet_summary_embed(current_value_jpy, change_1h, total_change)
+            channel = bot.get_channel(config['discord']['summary_channel_id'])
+            if channel:
+                await channel.send(embed=embed)
+            else:
+                logger.error("Summary Channel ID not found or bot cannot access it.")
+            
+            last_summary_time = now
+            last_hour_value_jpy = current_value_jpy
+            logger.info("Sent Hourly Summary")
 
         # 2. Trading Logic
         df = await binance.get_ohlcv(symbol, timeframe=config['trading']['timeframe'])
@@ -41,16 +181,76 @@ async def trading_loop():
         signal = strategy.analyze(df)
         
         if signal:
-            # ... (Trading Logic)
+            logger.info(f"Signal Detected: {signal}")
+            
+            eth_bal, eth_free = await binance.get_balance(base_currency)
+            btc_bal, btc_free = await binance.get_balance(quote_currency)
+            ticker = await binance.get_ticker(symbol)
+            current_price = ticker['last']
+            btc_jpy_ticker = await binance.get_ticker("BTC/JPY")
+            btc_jpy = btc_jpy_ticker['last']
+
+            target_amount_btc = trade_amount_jpy / btc_jpy
+            amount_eth = target_amount_btc / current_price
+
+            executed = False
+            if signal == 'BUY':
+                cost_btc = amount_eth * current_price
+                if btc_free > cost_btc:
+                    logger.info(f"Attempting to BUY {amount_eth} {base_currency}")
+                    order = await binance.create_order(symbol, 'buy', amount_eth)
+                    if order: executed = True
+                else:
+                    logger.warning("Insufficient BTC for BUY")
+
+            elif signal == 'SELL':
+                if eth_free > amount_eth:
+                    logger.info(f"Attempting to SELL {amount_eth} {base_currency}")
+                    order = await binance.create_order(symbol, 'sell', amount_eth)
+                    if order: executed = True
+                else:
+                    logger.warning("Insufficient ETH for SELL")
             
             if executed:
-                # ... (Discord Notification)
+                embed = DiscordEmbedGenerator.create_trade_embed(signal, symbol, current_price, amount_eth, trade_amount_jpy, "coffin299")
+                channel = bot.get_channel(config['discord']['trade_channel_id'])
+                if channel:
+                    await channel.send(embed=embed)
+                else:
+                    logger.error("Trade Channel ID not found or bot cannot access it.")
                 
                 # Broadcast Trade
                 await broadcast_update({
                     "type": "trade",
                     "payload": {
                         "side": signal,
+                        "symbol": symbol,
+                        "price": current_price
+                    }
+                })
+
+    except Exception as e:
+        logger.error(f"Error in trading loop: {e}")
+
+@trading_loop.before_loop
+async def before_trading_loop():
+    await bot.wait_until_ready()
+
+async def main():
+    # Start Web Server in background
+    config_uvicorn = uvicorn.Config(app, host="0.0.0.0", port=8000, log_level="info")
+    server = uvicorn.Server(config_uvicorn)
+    
+    # Open Browser
+    webbrowser.open("http://localhost:8000")
+    logger.info("Opened WebGUI in browser")
+
+    async with bot:
+        # Run both Bot and Web Server
+        await asyncio.gather(
+            bot.start(config['discord']['token']),
+            server.serve()
+        )
 
 if __name__ == "__main__":
     try:

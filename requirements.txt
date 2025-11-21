@@ -4,7 +4,7 @@ numpy
 pyyaml
 requests
 python-dotenv
-pandas_ta
+ta
 discord.py
 fastapi
 uvicorn

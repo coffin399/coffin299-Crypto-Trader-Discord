@@ -16,6 +16,7 @@ trading:
   timeframe: "1m"  # High frequency
   trade_amount_jpy: 2000  # Approximate amount in JPY to trade per order
   dry_run: true  # Set to false to trade with real money
+  dry_run_initial_capital_jpy: 10000 # Initial capital for dry run (simulated)
   strategy:
     rsi_period: 14
     rsi_overbought: 70

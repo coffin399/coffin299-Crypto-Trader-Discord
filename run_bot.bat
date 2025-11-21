@@ -26,6 +26,7 @@ call .venv\Scripts\activate
 
 REM Install requirements
 echo Installing dependencies...
+python -m pip install --upgrade pip
 pip install -r requirements.txt
 if %errorlevel% neq 0 (
     echo Error: Failed to install dependencies.

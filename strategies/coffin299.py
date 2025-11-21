@@ -1,4 +1,4 @@
-import pandas_ta as ta
+import ta
 import pandas as pd
 
 class Coffin299Strategy:
@@ -16,14 +16,14 @@ class Coffin299Strategy:
         if df.empty:
             return None
 
-        # Calculate Indicators
-        df['rsi'] = ta.rsi(df['close'], length=self.rsi_period)
-        bb = ta.bbands(df['close'], length=self.bb_period, std=self.bb_std)
-        
-        # Rename columns for easier access (pandas_ta names can be verbose)
-        # Example: BBL_20_2.0, BBM_20_2.0, BBU_20_2.0
-        df['bb_lower'] = bb[f'BBL_{self.bb_period}_{self.bb_std}']
-        df['bb_upper'] = bb[f'BBU_{self.bb_period}_{self.bb_std}']
+        # Calculate RSI
+        rsi_indicator = ta.momentum.RSIIndicator(close=df['close'], window=self.rsi_period)
+        df['rsi'] = rsi_indicator.rsi()
+
+        # Calculate Bollinger Bands
+        bb_indicator = ta.volatility.BollingerBands(close=df['close'], window=self.bb_period, window_dev=self.bb_std)
+        df['bb_lower'] = bb_indicator.bollinger_lband()
+        df['bb_upper'] = bb_indicator.bollinger_hband()
 
         current_price = df['close'].iloc[-1]
         current_rsi = df['rsi'].iloc[-1]
