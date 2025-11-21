@@ -269,7 +269,8 @@ async def trading_loop():
 
 @trading_loop.before_loop
 async def before_trading_loop():
-    await bot.wait_until_ready()
+    # Do not wait for bot to be ready, so trading can continue offline
+    pass
 
 @app.get("/api/history")
 async def get_history():
@@ -300,6 +301,14 @@ async def get_history():
         logger.error(f"Error fetching history: {e}")
         return []
 
+async def run_discord_bot():
+    while True:
+        try:
+            await bot.start(config['discord']['token'])
+        except Exception as e:
+            logger.error(f"Discord connection error: {e}. Retrying in 30s...")
+            await asyncio.sleep(30)
+
 async def main():
     # Start Web Server in background
     config_uvicorn = uvicorn.Config(app, host="0.0.0.0", port=8000, log_level="info")
@@ -309,12 +318,15 @@ async def main():
     webbrowser.open("http://localhost:8000")
     logger.info("Opened WebGUI in browser")
 
-    async with bot:
-        # Run both Bot and Web Server
-        await asyncio.gather(
-            bot.start(config['discord']['token']),
-            server.serve()
-        )
+    # Start Trading Loop explicitly
+    if not trading_loop.is_running():
+        trading_loop.start()
+
+    # Run both Bot (Robust) and Web Server
+    await asyncio.gather(
+        run_discord_bot(),
+        server.serve()
+    )
 
 if __name__ == "__main__":
     try:
