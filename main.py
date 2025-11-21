@@ -229,7 +229,8 @@ async def trading_loop():
                     order = await binance.create_order(symbol, 'sell', amount_eth)
                     if order: executed = True
                 else:
-                    logger.warning("Insufficient ETH for SELL")
+                    # Only log warning if we haven't logged it recently (optional, but for now just debug)
+                    logger.debug("Insufficient ETH for SELL")
             
             if executed:
                 embed = DiscordEmbedGenerator.create_trade_embed(signal, symbol, current_price, amount_eth, trade_amount_jpy, "coffin299")

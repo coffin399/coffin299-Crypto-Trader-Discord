@@ -46,12 +46,13 @@ class Coffin299Strategy:
         logger.info(f"Price: {current_price:.6f} | EMA12: {ema_fast_val:.6f} | EMA26: {ema_slow_val:.6f} | StochK: {fastk:.2f} | StochD: {fastd:.2f}")
 
         # Logic
-        # BUY: Uptrend (EMA Fast > Slow) AND Oversold (StochK < 20)
-        if ema_fast_val > ema_slow_val and fastk < self.oversold:
+        # Pure StochRSI Scalping (Mean Reversion)
+        # BUY: StochK < Oversold
+        if fastk < self.oversold:
             return 'BUY'
         
-        # SELL: Downtrend (EMA Fast < Slow) OR Overbought (StochK > 80)
-        elif ema_fast_val < ema_slow_val or fastk > self.overbought:
+        # SELL: StochK > Overbought
+        elif fastk > self.overbought:
             return 'SELL'
             
         return None
