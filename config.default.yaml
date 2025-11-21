@@ -19,10 +19,10 @@ trading:
   dry_run_initial_capital_btc: 0.000768654392635 # Initial capital in BTC for dry run
   strategy:
     rsi_period: 14
-    rsi_overbought: 70
-    rsi_oversold: 30
+    rsi_overbought: 60 # Was 70
+    rsi_oversold: 40   # Was 30
     bb_period: 20
-    bb_std: 2.0
+    bb_std: 1.5        # Was 2.0 (Narrower bands)
     take_profit_pct: 0.005 # 0.5%
     stop_loss_pct: 0.01 # 1%
 
