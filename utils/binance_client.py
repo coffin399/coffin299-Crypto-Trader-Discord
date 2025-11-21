@@ -23,6 +23,8 @@ class BinanceClient:
             'enableRateLimit': True,
             'options': {
                 'defaultType': 'spot',
+                'fetchMarkets': ['spot'], # Explicitly only fetch spot markets
+                'warnOnFetchOpenOrdersWithoutSymbol': False,
             }
         })
         if self.testnet:

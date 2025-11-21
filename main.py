@@ -114,7 +114,11 @@ async def trading_loop():
             eth_bal, _ = await binance.get_balance(base_currency)
             btc_bal, _ = await binance.get_balance(quote_currency)
             ticker = await binance.get_ticker(symbol)
-            current_price = ticker['last'] if ticker else 0
+            if ticker:
+                current_price = ticker['last']
+            else:
+                logger.error(f"Failed to get ticker for {symbol}. using 0.")
+                current_price = 0
             
             total_btc_value = (eth_bal * current_price) + btc_bal
             start_value_jpy = total_btc_value * btc_jpy
@@ -136,50 +140,52 @@ async def trading_loop():
         # Broadcast Status Update
         if initial_setup_done:
             ticker = await binance.get_ticker(symbol)
-            current_price = ticker['last']
-            btc_jpy = await get_btc_jpy_price()
-            
-            eth_bal, _ = await binance.get_balance(base_currency)
-            btc_bal, _ = await binance.get_balance(quote_currency)
-            
-            current_total_btc = (eth_bal * current_price) + btc_bal
-            current_value_jpy = current_total_btc * btc_jpy
-            total_change = current_value_jpy - start_value_jpy
+            if ticker:
+                current_price = ticker['last']
+                btc_jpy = await get_btc_jpy_price()
+                
+                eth_bal, _ = await binance.get_balance(base_currency)
+                btc_bal, _ = await binance.get_balance(quote_currency)
+                
+                current_total_btc = (eth_bal * current_price) + btc_bal
+                current_value_jpy = current_total_btc * btc_jpy
+                total_change = current_value_jpy - start_value_jpy
 
-            await broadcast_update({
-                "type": "status",
-                "payload": {
-                    "total_value_jpy": current_value_jpy,
-                    "total_change_jpy": total_change
-                }
-            })
+                await broadcast_update({
+                    "type": "status",
+                    "payload": {
+                        "total_value_jpy": current_value_jpy,
+                        "total_change_jpy": total_change
+                    }
+                })
 
         # 1. Time Check for Hourly Summary
         now = datetime.datetime.now()
         if (now - last_summary_time).total_seconds() >= 3600:
             ticker = await binance.get_ticker(symbol)
-            current_price = ticker['last']
-            btc_jpy = await get_btc_jpy_price()
-            
-            eth_bal, _ = await binance.get_balance(base_currency)
-            btc_bal, _ = await binance.get_balance(quote_currency)
-            
-            current_total_btc = (eth_bal * current_price) + btc_bal
-            current_value_jpy = current_total_btc * btc_jpy
-            
-            change_1h = current_value_jpy - last_hour_value_jpy
-            total_change = current_value_jpy - start_value_jpy
-            
-            embed = DiscordEmbedGenerator.create_wallet_summary_embed(current_value_jpy, change_1h, total_change)
-            channel = bot.get_channel(config['discord']['summary_channel_id'])
-            if channel:
-                await channel.send(embed=embed)
-            else:
-                logger.error("Summary Channel ID not found or bot cannot access it.")
-            
-            last_summary_time = now
-            last_hour_value_jpy = current_value_jpy
-            logger.info("Sent Hourly Summary")
+            if ticker:
+                current_price = ticker['last']
+                btc_jpy = await get_btc_jpy_price()
+                
+                eth_bal, _ = await binance.get_balance(base_currency)
+                btc_bal, _ = await binance.get_balance(quote_currency)
+                
+                current_total_btc = (eth_bal * current_price) + btc_bal
+                current_value_jpy = current_total_btc * btc_jpy
+                
+                change_1h = current_value_jpy - last_hour_value_jpy
+                total_change = current_value_jpy - start_value_jpy
+                
+                embed = DiscordEmbedGenerator.create_wallet_summary_embed(current_value_jpy, change_1h, total_change)
+                channel = bot.get_channel(config['discord']['summary_channel_id'])
+                if channel:
+                    await channel.send(embed=embed)
+                else:
+                    logger.error("Summary Channel ID not found or bot cannot access it.")
+                
+                last_summary_time = now
+                last_hour_value_jpy = current_value_jpy
+                logger.info("Sent Hourly Summary")
 
         # 2. Trading Logic
         df = await binance.get_ohlcv(symbol, timeframe=config['trading']['timeframe'])
@@ -206,8 +212,16 @@ async def trading_loop():
             eth_bal, eth_free = await binance.get_balance(base_currency)
             btc_bal, btc_free = await binance.get_balance(quote_currency)
             ticker = await binance.get_ticker(symbol)
+            if not ticker:
+                logger.error(f"Failed to get ticker for {symbol}. Skipping cycle.")
+                return
+
             current_price = ticker['last']
             btc_jpy = await get_btc_jpy_price()
+
+            if btc_jpy == 0:
+                 logger.warning("BTC/JPY price is 0. Skipping trade calculation.")
+                 return
 
             target_amount_btc = trade_amount_jpy / btc_jpy
             amount_eth = target_amount_btc / current_price
