@@ -1,0 +1,31 @@
+# Binance Configuration
+binance:
+  api_key: "YOUR_API_KEY"
+  api_secret: "YOUR_API_SECRET"
+  testnet: false  # Set to true for testing on Binance Testnet
+
+# Discord Configuration
+discord:
+  token: "YOUR_BOT_TOKEN"
+  trade_channel_id: 123456789012345678  # Channel ID for Buy/Sell notifications
+  summary_channel_id: 123456789012345678  # Channel ID for Hourly Summaries
+
+# Trading Configuration
+trading:
+  symbol: "ETH/BTC"
+  timeframe: "1m"  # High frequency
+  trade_amount_jpy: 10000  # Approximate amount in JPY to trade per order
+  dry_run: true  # Set to false to trade with real money
+  strategy:
+    rsi_period: 14
+    rsi_overbought: 70
+    rsi_oversold: 30
+    bb_period: 20
+    bb_std: 2.0
+    take_profit_pct: 0.005 # 0.5%
+    stop_loss_pct: 0.01 # 1%
+
+# System Configuration
+system:
+  log_level: "INFO"
+  check_interval: 60 # seconds
