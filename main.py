@@ -66,7 +66,7 @@ async def trading_loop():
                 config['binance']['api_secret'],
                 testnet=config['binance']['testnet'],
                 paper_trading=config['trading']['dry_run'],
-                paper_initial_jpy=config['trading'].get('dry_run_initial_capital_jpy', 10000)
+                paper_initial_btc=config['trading'].get('dry_run_initial_capital_btc', 0.00076865)
             )
             await binance.initialize()
             
@@ -84,10 +84,22 @@ async def trading_loop():
         trade_amount_jpy = config['trading']['trade_amount_jpy']
         dry_run = config['trading']['dry_run']
 
+        # Helper to get BTC/JPY price
+        async def get_btc_jpy_price():
+            ticker = await binance.get_ticker("BTC/JPY")
+            if ticker:
+                return ticker['last']
+            
+            # Fallback to BTC/USDT * 155
+            ticker_usdt = await binance.get_ticker("BTC/USDT")
+            if ticker_usdt:
+                return ticker_usdt['last'] * 155.0
+            
+            return 0.0
+
         # Initial Value Setup (Run once)
         if not initial_setup_done:
-            btc_jpy_ticker = await binance.get_ticker("BTC/JPY")
-            btc_jpy = btc_jpy_ticker['last'] if btc_jpy_ticker else 0
+            btc_jpy = await get_btc_jpy_price()
             
             eth_bal, _ = await binance.get_balance(base_currency)
             btc_bal, _ = await binance.get_balance(quote_currency)
@@ -98,7 +110,7 @@ async def trading_loop():
             start_value_jpy = total_btc_value * btc_jpy
             last_hour_value_jpy = start_value_jpy
             initial_setup_done = True
-            logger.info(f"Initial Value: ¥{start_value_jpy:,.0f}")
+            logger.info(f"Initial Value: ¥{start_value_jpy:,.0f} (BTC/JPY: {btc_jpy:,.0f})")
 
             # Send Startup Summary
             mode_str = "Dry Run (Paper)" if dry_run else "Live Trading"
@@ -115,8 +127,7 @@ async def trading_loop():
         if initial_setup_done:
             ticker = await binance.get_ticker(symbol)
             current_price = ticker['last']
-            btc_jpy_ticker = await binance.get_ticker("BTC/JPY")
-            btc_jpy = btc_jpy_ticker['last']
+            btc_jpy = await get_btc_jpy_price()
             
             eth_bal, _ = await binance.get_balance(base_currency)
             btc_bal, _ = await binance.get_balance(quote_currency)
@@ -138,8 +149,7 @@ async def trading_loop():
         if (now - last_summary_time).total_seconds() >= 3600:
             ticker = await binance.get_ticker(symbol)
             current_price = ticker['last']
-            btc_jpy_ticker = await binance.get_ticker("BTC/JPY")
-            btc_jpy = btc_jpy_ticker['last']
+            btc_jpy = await get_btc_jpy_price()
             
             eth_bal, _ = await binance.get_balance(base_currency)
             btc_bal, _ = await binance.get_balance(quote_currency)
@@ -187,8 +197,7 @@ async def trading_loop():
             btc_bal, btc_free = await binance.get_balance(quote_currency)
             ticker = await binance.get_ticker(symbol)
             current_price = ticker['last']
-            btc_jpy_ticker = await binance.get_ticker("BTC/JPY")
-            btc_jpy = btc_jpy_ticker['last']
+            btc_jpy = await get_btc_jpy_price()
 
             target_amount_btc = trade_amount_jpy / btc_jpy
             amount_eth = target_amount_btc / current_price

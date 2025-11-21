@@ -4,12 +4,12 @@ import logging
 import asyncio
 
 class BinanceClient:
-    def __init__(self, api_key, api_secret, testnet=False, paper_trading=False, paper_initial_jpy=0):
+    def __init__(self, api_key, api_secret, testnet=False, paper_trading=False, paper_initial_btc=0):
         self.api_key = api_key
         self.api_secret = api_secret
         self.testnet = testnet
         self.paper_trading = paper_trading
-        self.paper_initial_jpy = paper_initial_jpy
+        self.paper_initial_btc = paper_initial_btc
         self.exchange = None
         self.logger = logging.getLogger(__name__)
         
@@ -35,15 +35,13 @@ class BinanceClient:
 
     async def _init_paper_balances(self):
         try:
-            ticker = await self.exchange.fetch_ticker("BTC/JPY")
-            btc_price = ticker['last']
-            # Start with 100% BTC
-            btc_amount = self.paper_initial_jpy / btc_price
+            # Start with fixed BTC amount
+            btc_amount = self.paper_initial_btc
             self.paper_balances = {
                 'BTC': {'free': btc_amount, 'total': btc_amount},
                 'ETH': {'free': 0.0, 'total': 0.0}
             }
-            self.logger.info(f"[PAPER] Initialized balances with ¥{self.paper_initial_jpy:,.0f} -> {btc_amount:.6f} BTC")
+            self.logger.info(f"[PAPER] Initialized balances with {btc_amount:.8f} BTC")
         except Exception as e:
             self.logger.error(f"Error initializing paper balances: {e}")
             # Fallback
