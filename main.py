@@ -245,6 +245,35 @@ async def trading_loop():
 async def before_trading_loop():
     await bot.wait_until_ready()
 
+@app.get("/api/history")
+async def get_history():
+    global binance, config
+    if not binance:
+        return []
+    
+    try:
+        symbol = config['trading']['symbol']
+        timeframe = config['trading']['timeframe']
+        # Fetch last 100 candles
+        df = await binance.get_ohlcv(symbol, timeframe=timeframe, limit=100)
+        
+        if df.empty:
+            return []
+            
+        candles = []
+        for _, row in df.iterrows():
+            candles.append({
+                "time": int(row['timestamp'].timestamp()),
+                "open": row['open'],
+                "high": row['high'],
+                "low": row['low'],
+                "close": row['close']
+            })
+        return candles
+    except Exception as e:
+        logger.error(f"Error fetching history: {e}")
+        return []
+
 async def main():
     # Start Web Server in background
     config_uvicorn = uvicorn.Config(app, host="0.0.0.0", port=8000, log_level="info")

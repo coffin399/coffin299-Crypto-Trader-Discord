@@ -40,7 +40,7 @@ new ResizeObserver(entries => {
 // WebSocket Handlers
 ws.onmessage = (event) => {
     const data = JSON.parse(event.data);
-    
+
     if (data.type === 'status') {
         updateStatus(data.payload);
     } else if (data.type === 'candle') {
@@ -52,7 +52,7 @@ ws.onmessage = (event) => {
 
 function updateStatus(status) {
     document.getElementById('total-value').innerText = `¥${status.total_value_jpy.toLocaleString()}`;
-    
+
     const pnlElement = document.getElementById('pnl');
     const pnl = status.total_change_jpy;
     pnlElement.innerText = `${pnl >= 0 ? '+' : ''}¥${pnl.toLocaleString()}`;
@@ -73,3 +73,19 @@ function addTrade(trade) {
     `;
     list.insertBefore(item, list.firstChild);
 }
+
+// Fetch History on Load
+async function fetchHistory() {
+    try {
+        const response = await fetch('/api/history');
+        const data = await response.json();
+        if (data && data.length > 0) {
+            candleSeries.setData(data);
+            chart.timeScale().fitContent();
+        }
+    } catch (error) {
+        console.error('Error fetching history:', error);
+    }
+}
+
+fetchHistory();
