@@ -60,16 +60,7 @@ async def trading_loop():
     global last_summary_time, last_hour_value_jpy, start_value_jpy, initial_setup_done, binance, strategy
 
     try:
-        if not binance:
-            binance = BinanceClient(
-                config['binance']['api_key'],
-                config['binance']['api_secret'],
-                testnet=config['binance']['testnet'],
-                paper_trading=config['trading']['dry_run'],
-                paper_initial_btc=config['trading'].get('dry_run_initial_capital_btc', 0.00076865)
-            )
-            await binance.initialize()
-            
+        if not strategy:
             strategy = Coffin299Strategy(
                 rsi_period=config['trading']['strategy']['rsi_period'],
                 rsi_overbought=config['trading']['strategy']['rsi_overbought'],
@@ -77,6 +68,22 @@ async def trading_loop():
                 bb_period=config['trading']['strategy']['bb_period'],
                 bb_std=config['trading']['strategy']['bb_std']
             )
+
+        if not binance:
+            try:
+                temp_binance = BinanceClient(
+                    config['binance']['api_key'],
+                    config['binance']['api_secret'],
+                    testnet=config['binance']['testnet'],
+                    paper_trading=config['trading']['dry_run'],
+                    paper_initial_btc=config['trading'].get('dry_run_initial_capital_btc', 0.00076865)
+                )
+                await temp_binance.initialize()
+                binance = temp_binance
+            except Exception as e:
+                logger.error(f"Failed to initialize Binance Client: {e}")
+                await asyncio.sleep(5) # Wait before retrying
+                return # Skip this iteration
 
         symbol = config['trading']['symbol']
         base_currency = symbol.split('/')[0]

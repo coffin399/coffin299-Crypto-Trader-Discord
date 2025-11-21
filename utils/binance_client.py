@@ -28,7 +28,12 @@ class BinanceClient:
         if self.testnet:
             self.exchange.set_sandbox_mode(True)
         # Load markets
-        await self.exchange.load_markets()
+        try:
+            await self.exchange.load_markets()
+        except Exception as e:
+            self.logger.error(f"Error loading markets: {e}")
+            # Continue anyway, as we might not need all markets for basic trading
+            # or if it's just a margin permission error
 
         if self.paper_trading:
             await self._init_paper_balances()
