@@ -18,11 +18,14 @@ trading:
   dry_run: true  # Set to false to trade with real money
   dry_run_initial_capital_btc: 0.000768654392635 # Initial capital in BTC for dry run
   strategy:
-    rsi_period: 14
-    rsi_overbought: 60 # Was 70
-    rsi_oversold: 40   # Was 30
-    bb_period: 20
-    bb_std: 1.5        # Was 2.0 (Narrower bands)
+    ema_fast: 12
+    ema_slow: 26
+    stoch_k: 3
+    stoch_d: 3
+    stoch_rsi: 14
+    stoch_window: 14
+    overbought: 80
+    oversold: 20
     take_profit_pct: 0.005 # 0.5%
     stop_loss_pct: 0.01 # 1%
 

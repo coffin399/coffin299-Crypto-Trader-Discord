@@ -62,11 +62,14 @@ async def trading_loop():
     try:
         if not strategy:
             strategy = Coffin299Strategy(
-                rsi_period=config['trading']['strategy']['rsi_period'],
-                rsi_overbought=config['trading']['strategy']['rsi_overbought'],
-                rsi_oversold=config['trading']['strategy']['rsi_oversold'],
-                bb_period=config['trading']['strategy']['bb_period'],
-                bb_std=config['trading']['strategy']['bb_std']
+                ema_fast=config['trading']['strategy']['ema_fast'],
+                ema_slow=config['trading']['strategy']['ema_slow'],
+                stoch_k=config['trading']['strategy']['stoch_k'],
+                stoch_d=config['trading']['strategy']['stoch_d'],
+                stoch_rsi=config['trading']['strategy']['stoch_rsi'],
+                stoch_window=config['trading']['strategy']['stoch_window'],
+                overbought=config['trading']['strategy']['overbought'],
+                oversold=config['trading']['strategy']['oversold']
             )
 
         if not binance:

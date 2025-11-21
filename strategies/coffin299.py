@@ -5,43 +5,53 @@ import logging
 logger = logging.getLogger(__name__)
 
 class Coffin299Strategy:
-    def __init__(self, rsi_period=14, rsi_overbought=70, rsi_oversold=30, bb_period=20, bb_std=2.0):
-        self.rsi_period = rsi_period
-        self.rsi_overbought = rsi_overbought
-        self.rsi_oversold = rsi_oversold
-        self.bb_period = bb_period
-        self.bb_std = bb_std
+    def __init__(self, ema_fast=12, ema_slow=26, stoch_k=3, stoch_d=3, stoch_rsi=14, stoch_window=14, overbought=80, oversold=20, **kwargs):
+        self.ema_fast = ema_fast
+        self.ema_slow = ema_slow
+        self.stoch_k = stoch_k
+        self.stoch_d = stoch_d
+        self.stoch_rsi = stoch_rsi
+        self.stoch_window = stoch_window
+        self.overbought = overbought
+        self.oversold = oversold
 
     def analyze(self, df):
         """
         Analyzes the dataframe and returns a signal: 'BUY', 'SELL', or None.
+        Freqtrade-style Scalping: StochRSI + EMA Crossover
         """
         if df.empty:
             return None
 
-        # Calculate RSI
-        rsi_indicator = ta.momentum.RSIIndicator(close=df['close'], window=self.rsi_period)
-        df['rsi'] = rsi_indicator.rsi()
+        # 1. Calculate EMAs (Trend)
+        df['ema_fast'] = ta.trend.EMAIndicator(close=df['close'], window=self.ema_fast).ema_indicator()
+        df['ema_slow'] = ta.trend.EMAIndicator(close=df['close'], window=self.ema_slow).ema_indicator()
 
-        # Calculate Bollinger Bands
-        bb_indicator = ta.volatility.BollingerBands(close=df['close'], window=self.bb_period, window_dev=self.bb_std)
-        df['bb_lower'] = bb_indicator.bollinger_lband()
-        df['bb_upper'] = bb_indicator.bollinger_hband()
+        # 2. Calculate Stochastic RSI (Momentum)
+        stoch_rsi = ta.momentum.StochRSIIndicator(
+            close=df['close'], 
+            window=self.stoch_rsi, 
+            smooth1=self.stoch_k, 
+            smooth2=self.stoch_d
+        )
+        df['fastk'] = stoch_rsi.stochrsi_k() * 100
+        df['fastd'] = stoch_rsi.stochrsi_d() * 100
 
         current_price = df['close'].iloc[-1]
-        current_rsi = df['rsi'].iloc[-1]
-        current_bb_lower = df['bb_lower'].iloc[-1]
-        current_bb_upper = df['bb_upper'].iloc[-1]
+        ema_fast_val = df['ema_fast'].iloc[-1]
+        ema_slow_val = df['ema_slow'].iloc[-1]
+        fastk = df['fastk'].iloc[-1]
+        fastd = df['fastd'].iloc[-1]
         
-        logger.info(f"Price: {current_price:.6f} | RSI: {current_rsi:.2f} | BB_L: {current_bb_lower:.6f} | BB_U: {current_bb_upper:.6f}")
+        logger.info(f"Price: {current_price:.6f} | EMA12: {ema_fast_val:.6f} | EMA26: {ema_slow_val:.6f} | StochK: {fastk:.2f} | StochD: {fastd:.2f}")
 
         # Logic
-        # Buy Signal: Price <= Lower BB AND RSI <= Oversold
-        if current_price <= current_bb_lower and current_rsi <= self.rsi_oversold:
+        # BUY: Uptrend (EMA Fast > Slow) AND Oversold (StochK < 20)
+        if ema_fast_val > ema_slow_val and fastk < self.oversold:
             return 'BUY'
         
-        # Sell Signal: Price >= Upper BB AND RSI >= Overbought
-        elif current_price >= current_bb_upper and current_rsi >= self.rsi_overbought:
+        # SELL: Downtrend (EMA Fast < Slow) OR Overbought (StochK > 80)
+        elif ema_fast_val < ema_slow_val or fastk > self.overbought:
             return 'SELL'
             
         return None
