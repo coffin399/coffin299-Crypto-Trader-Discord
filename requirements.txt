@@ -6,3 +6,7 @@ requests
 python-dotenv
 pandas_ta
 discord.py
+fastapi
+uvicorn
+websockets
+jinja2

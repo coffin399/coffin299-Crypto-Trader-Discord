@@ -14,7 +14,7 @@ discord:
 trading:
   symbol: "ETH/BTC"
   timeframe: "1m"  # High frequency
-  trade_amount_jpy: 10000  # Approximate amount in JPY to trade per order
+  trade_amount_jpy: 2000  # Approximate amount in JPY to trade per order
   dry_run: true  # Set to false to trade with real money
   strategy:
     rsi_period: 14

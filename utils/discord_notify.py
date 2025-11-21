@@ -20,9 +20,9 @@ class DiscordEmbedGenerator:
         return embed
 
     @staticmethod
-    def create_wallet_summary_embed(total_value_jpy, change_1h_jpy, total_change_jpy):
+    def create_wallet_summary_embed(total_value_jpy, change_1h_jpy, total_change_jpy, title="💼 Wallet Summary"):
         embed = discord.Embed(
-            title="💼 Wallet Summary",
+            title=title,
             color=discord.Color.blue(),
             timestamp=datetime.datetime.now()
         )

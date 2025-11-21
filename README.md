@@ -1,10 +1,11 @@
 # Coffin299 Binance Trader
 
-A high-frequency ETH/BTC circulation trading bot with Discord integration.
+A high-frequency ETH/BTC circulation trading bot with Discord integration and a modern WebGUI.
 
 ## Features
 - **Strategy**: `coffin299strategy` (RSI + Bollinger Bands).
 - **Circulation**: Trades ETH/BTC pair to accumulate both assets.
+- **WebGUI**: Real-time dashboard on `http://localhost:8000`.
 - **Notifications**: Beautiful Discord Embeds via a dedicated Discord Bot.
     - **Trades**: Sent to a specific Trade Channel.
     - **Summaries**: Sent to a specific Summary Channel.
@@ -15,18 +16,19 @@ A high-frequency ETH/BTC circulation trading bot with Discord integration.
 
 1. **Prerequisites**:
    - Python 3.11 installed.
-   - A Discord Bot Token (create one at [Discord Developer Portal](https://discord.com/developers/applications)).
-   - Two Discord Channels (one for trades, one for summaries) - get their IDs (Enable Developer Mode in Discord -> Right Click Channel -> Copy ID).
+   - A Discord Bot Token.
+   - Two Discord Channels (Trade & Summary).
 
 2. **Configuration**:
-   - Edit `config.yaml`.
+   - Edit `config.yaml` (copied from `config.default.yaml` on first run).
    - Add your **Binance API Key** and **Secret**.
    - Add your **Discord Bot Token**.
    - Add your **Trade Channel ID** and **Summary Channel ID**.
-   - Adjust trading parameters if needed.
 
 3. **Run**:
-   Double-click `run_bot.bat` to start. It will automatically create a virtual environment, install dependencies, and run the bot.
+   Double-click `run_bot.bat` to start.
+   - **Bot**: Starts trading and sending Discord notifications.
+   - **WebGUI**: Opens at `http://localhost:8000`.
 
 ## Strategy Details
 - **Buy Signal**: Price touches Lower Bollinger Band AND RSI < 30.
