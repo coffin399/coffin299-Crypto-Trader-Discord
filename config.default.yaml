@@ -1,8 +1,8 @@
-# Binance Configuration
-binance:
-  api_key: "YOUR_API_KEY"
-  api_secret: "YOUR_API_SECRET"
-  testnet: false  # Set to true for testing on Binance Testnet
+# Hyperliquid Configuration
+hyperliquid:
+  wallet_address: "YOUR_WALLET_ADDRESS"
+  wallet_private_key: "YOUR_PRIVATE_KEY"
+  testnet: false # Hyperliquid Testnet (Arbitrum Goerli/Sepolia)
 
 # Discord Configuration
 discord:
@@ -12,22 +12,24 @@ discord:
 
 # Trading Configuration
 trading:
-  symbol: "ETH/BTC"
-  timeframe: "1m"  # High frequency
-  trade_amount_jpy: 2000  # Approximate amount in JPY to trade per order
-  dry_run: true  # Set to false to trade with real money
-  dry_run_initial_capital_btc: 0.000768654392635 # Initial capital in BTC for dry run
+  symbol: "ETH/USDC:USDC" # Hyperliquid Perpetual Symbol
+  timeframe: "1m"
+  trade_amount_usd: 100 # Trade amount in USD (USDC)
+  leverage: 1
+  dry_run: true
+  dry_run_initial_capital_usd: 10000
+
   strategy:
+    name: "HyperTrend"
     ema_fast: 12
     ema_slow: 26
-    stoch_k: 3
-    stoch_d: 3
-    stoch_rsi: 14
-    stoch_window: 14
-    overbought: 80
-    oversold: 20
-    take_profit_pct: 0.005 # 0.5%
-    stop_loss_pct: 0.01 # 1%
+    macd_signal: 9
+    atr_period: 14
+    atr_multiplier_sl: 2.0 # Stop Loss = Entry - (ATR * 2)
+    atr_multiplier_tp: 3.0 # Take Profit = Entry + (ATR * 3)
+    rsi_period: 14
+    rsi_overbought: 70
+    rsi_oversold: 30
 
 # System Configuration
 system:

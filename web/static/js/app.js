@@ -51,12 +51,34 @@ ws.onmessage = (event) => {
 };
 
 function updateStatus(status) {
-    document.getElementById('total-value').innerText = `¥${status.total_value_jpy.toLocaleString()}`;
+    document.getElementById('total-value').innerText = `$${status.total_value_usd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
     const pnlElement = document.getElementById('pnl');
-    const pnl = status.total_change_jpy;
-    pnlElement.innerText = `${pnl >= 0 ? '+' : ''}¥${pnl.toLocaleString()}`;
+    const pnl = status.total_change_usd;
+    pnlElement.innerText = `${pnl >= 0 ? '+' : ''}$${pnl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     pnlElement.className = `sub-value ${pnl >= 0 ? 'positive' : 'negative'}`;
+
+    updatePositions(status.position);
+}
+
+function updatePositions(position) {
+    const tbody = document.getElementById('positions-body');
+    if (!position || position.size === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color: #666;">No active positions</td></tr>';
+        return;
+    }
+
+    const pnl = position.unrealizedPnL || 0;
+    const pnlClass = pnl >= 0 ? 'positive' : 'negative';
+
+    tbody.innerHTML = `
+        <tr>
+            <td>${position.symbol}</td>
+            <td class="${position.size > 0 ? 'positive' : 'negative'}">${position.size}</td>
+            <td>$${position.entryPrice.toFixed(2)}</td>
+            <td class="${pnlClass}">$${pnl.toFixed(2)}</td>
+        </tr>
+    `;
 }
 
 function addTrade(trade) {

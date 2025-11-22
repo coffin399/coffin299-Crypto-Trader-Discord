@@ -9,9 +9,9 @@ import uvicorn
 from discord.ext import tasks, commands
 from dotenv import load_dotenv
 
-from utils.binance_client import BinanceClient
+from utils.hyperliquid_client import HyperliquidClient
 from utils.discord_notify import DiscordEmbedGenerator
-from strategies.coffin299 import Coffin299Strategy
+from strategies.coffin299 import HyperTrendStrategy
 from web.server import app, broadcast_update
 
 # Setup Logging
@@ -19,7 +19,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
-logger = logging.getLogger("BinanceTrader")
+logger = logging.getLogger("HyperTrader")
 
 def load_config():
     if not os.path.exists('config.yaml'):
@@ -42,11 +42,11 @@ intents = discord.Intents.default()
 bot = commands.Bot(command_prefix='!', intents=intents)
 
 # Global State
-binance = None
+exchange = None
 strategy = None
 last_summary_time = datetime.datetime.now()
-last_hour_value_jpy = 0
-start_value_jpy = 0
+last_hour_value_usd = 0
+start_value_usd = 0
 initial_setup_done = False
 
 @bot.event
@@ -57,79 +57,56 @@ async def on_ready():
 
 @tasks.loop(seconds=config['system']['check_interval'])
 async def trading_loop():
-    global last_summary_time, last_hour_value_jpy, start_value_jpy, initial_setup_done, binance, strategy
+    global last_summary_time, last_hour_value_usd, start_value_usd, initial_setup_done, exchange, strategy
 
     try:
         if not strategy:
-            strategy = Coffin299Strategy(
-                ema_fast=config['trading']['strategy']['ema_fast'],
-                ema_slow=config['trading']['strategy']['ema_slow'],
-                stoch_k=config['trading']['strategy']['stoch_k'],
-                stoch_d=config['trading']['strategy']['stoch_d'],
-                stoch_rsi=config['trading']['strategy']['stoch_rsi'],
-                stoch_window=config['trading']['strategy']['stoch_window'],
-                overbought=config['trading']['strategy']['overbought'],
-                oversold=config['trading']['strategy']['oversold']
+            s_conf = config['trading']['strategy']
+            strategy = HyperTrendStrategy(
+                ema_fast=s_conf['ema_fast'],
+                ema_slow=s_conf['ema_slow'],
+                macd_signal=s_conf['macd_signal'],
+                atr_period=s_conf['atr_period'],
+                atr_multiplier_sl=s_conf['atr_multiplier_sl'],
+                atr_multiplier_tp=s_conf['atr_multiplier_tp'],
+                rsi_period=s_conf['rsi_period'],
+                rsi_overbought=s_conf['rsi_overbought'],
+                rsi_oversold=s_conf['rsi_oversold']
             )
 
-        if not binance:
+        if not exchange:
             try:
-                temp_binance = BinanceClient(
-                    config['binance']['api_key'],
-                    config['binance']['api_secret'],
-                    testnet=config['binance']['testnet'],
+                temp_exchange = HyperliquidClient(
+                    config['hyperliquid']['wallet_address'],
+                    config['hyperliquid']['wallet_private_key'],
+                    testnet=config['hyperliquid']['testnet'],
                     paper_trading=config['trading']['dry_run'],
-                    paper_initial_btc=config['trading'].get('dry_run_initial_capital_btc', 0.00076865)
+                    paper_initial_usd=config['trading'].get('dry_run_initial_capital_usd', 10000)
                 )
-                await temp_binance.initialize()
-                binance = temp_binance
+                await temp_exchange.initialize()
+                exchange = temp_exchange
             except Exception as e:
-                logger.error(f"Failed to initialize Binance Client: {e}")
+                logger.error(f"Failed to initialize Hyperliquid Client: {e}")
                 await asyncio.sleep(5) # Wait before retrying
                 return # Skip this iteration
 
         symbol = config['trading']['symbol']
-        base_currency = symbol.split('/')[0]
-        quote_currency = symbol.split('/')[1]
-        trade_amount_jpy = config['trading']['trade_amount_jpy']
+        trade_amount_usd = config['trading']['trade_amount_usd']
         dry_run = config['trading']['dry_run']
-
-        # Helper to get BTC/JPY price
-        async def get_btc_jpy_price():
-            ticker = await binance.get_ticker("BTC/JPY")
-            if ticker:
-                return ticker['last']
-            
-            # Fallback to BTC/USDT * 155
-            ticker_usdt = await binance.get_ticker("BTC/USDT")
-            if ticker_usdt:
-                return ticker_usdt['last'] * 155.0
-            
-            return 0.0
 
         # Initial Value Setup (Run once)
         if not initial_setup_done:
-            btc_jpy = await get_btc_jpy_price()
-            
-            eth_bal, _ = await binance.get_balance(base_currency)
-            btc_bal, _ = await binance.get_balance(quote_currency)
-            ticker = await binance.get_ticker(symbol)
-            if ticker:
-                current_price = ticker['last']
-            else:
-                logger.error(f"Failed to get ticker for {symbol}. using 0.")
-                current_price = 0
-            
-            total_btc_value = (eth_bal * current_price) + btc_bal
-            start_value_jpy = total_btc_value * btc_jpy
-            last_hour_value_jpy = start_value_jpy
+            total_bal, free_bal = await exchange.get_balance_usdc()
+            # For Perps, we should also check unrealized PnL if possible, but for now start with Balance
+            start_value_usd = total_bal
+            last_hour_value_usd = start_value_usd
             initial_setup_done = True
-            logger.info(f"Initial Value: ¥{start_value_jpy:,.0f} (BTC/JPY: {btc_jpy:,.0f})")
+            logger.info(f"Initial Value: ${start_value_usd:,.2f} USDC")
 
             # Send Startup Summary
             mode_str = "Dry Run (Paper)" if dry_run else "Live Trading"
             embed = DiscordEmbedGenerator.create_wallet_summary_embed(
-                start_value_jpy, 0, 0, title=f"🚀 Bot Started ({mode_str})"
+                start_value_usd, 0, 0, title=f"🚀 Bot Started ({mode_str})"
             )
             channel = bot.get_channel(config['discord']['summary_channel_id'])
             if channel:
@@ -139,56 +116,51 @@ async def trading_loop():
 
         # Broadcast Status Update
         if initial_setup_done:
-            ticker = await binance.get_ticker(symbol)
-            if ticker:
-                current_price = ticker['last']
-                btc_jpy = await get_btc_jpy_price()
-                
-                eth_bal, _ = await binance.get_balance(base_currency)
-                btc_bal, _ = await binance.get_balance(quote_currency)
-                
-                current_total_btc = (eth_bal * current_price) + btc_bal
-                current_value_jpy = current_total_btc * btc_jpy
-                total_change = current_value_jpy - start_value_jpy
+            total_bal, free_bal = await exchange.get_balance_usdc()
+            current_value_usd = total_bal
+            total_change = current_value_usd - start_value_usd
+            
+            # Get current position for UI
+            position = await exchange.get_position(symbol)
+            pos_data = None
+            if position:
+                pos_data = {
+                    "symbol": position['symbol'],
+                    "size": position['size'],
+                    "entryPrice": position['entryPrice'],
+                    "unrealizedPnL": position.get('unrealizedPnL', 0),
+                    "leverage": position.get('leverage', 1)
+                }
 
-                await broadcast_update({
-                    "type": "status",
-                    "payload": {
-                        "total_value_jpy": current_value_jpy,
-                        "total_change_jpy": total_change
-                    }
-                })
+            await broadcast_update({
+                "type": "status",
+                "payload": {
+                    "total_value_usd": current_value_usd,
+                    "total_change_usd": total_change,
+                    "position": pos_data
+                }
+            })
 
         # 1. Time Check for Hourly Summary
         now = datetime.datetime.now()
         if (now - last_summary_time).total_seconds() >= 3600:
-            ticker = await binance.get_ticker(symbol)
-            if ticker:
-                current_price = ticker['last']
-                btc_jpy = await get_btc_jpy_price()
-                
-                eth_bal, _ = await binance.get_balance(base_currency)
-                btc_bal, _ = await binance.get_balance(quote_currency)
-                
-                current_total_btc = (eth_bal * current_price) + btc_bal
-                current_value_jpy = current_total_btc * btc_jpy
-                
-                change_1h = current_value_jpy - last_hour_value_jpy
-                total_change = current_value_jpy - start_value_jpy
-                
-                embed = DiscordEmbedGenerator.create_wallet_summary_embed(current_value_jpy, change_1h, total_change)
-                channel = bot.get_channel(config['discord']['summary_channel_id'])
-                if channel:
-                    await channel.send(embed=embed)
-                else:
-                    logger.error("Summary Channel ID not found or bot cannot access it.")
-                
-                last_summary_time = now
-                last_hour_value_jpy = current_value_jpy
-                logger.info("Sent Hourly Summary")
+            total_bal, _ = await exchange.get_balance_usdc()
+            current_value_usd = total_bal
+            
+            change_1h = current_value_usd - last_hour_value_usd
+            total_change = current_value_usd - start_value_usd
+            
+            embed = DiscordEmbedGenerator.create_wallet_summary_embed(current_value_usd, change_1h, total_change)
+            channel = bot.get_channel(config['discord']['summary_channel_id'])
+            if channel:
+                await channel.send(embed=embed)
+            
+            last_summary_time = now
+            last_hour_value_usd = current_value_usd
+            logger.info("Sent Hourly Summary")
 
         # 2. Trading Logic
-        df = await binance.get_ohlcv(symbol, timeframe=config['trading']['timeframe'])
+        df = await exchange.get_ohlcv(symbol, timeframe=config['trading']['timeframe'])
         
         # Broadcast Candle
         if not df.empty:
@@ -204,55 +176,69 @@ async def trading_loop():
                 }
             })
 
-        signal = strategy.analyze(df)
+        signal_data = strategy.analyze(df)
         
-        if signal:
+        if signal_data:
+            signal = signal_data['signal']
             logger.info(f"Signal Detected: {signal}")
             
-            eth_bal, eth_free = await binance.get_balance(base_currency)
-            btc_bal, btc_free = await binance.get_balance(quote_currency)
-            ticker = await binance.get_ticker(symbol)
+            total_bal, free_bal = await exchange.get_balance_usdc()
+            ticker = await exchange.get_ticker(symbol)
             if not ticker:
                 logger.error(f"Failed to get ticker for {symbol}. Skipping cycle.")
                 return
 
             current_price = ticker['last']
-            btc_jpy = await get_btc_jpy_price()
-
-            if btc_jpy == 0:
-                 logger.warning("BTC/JPY price is 0. Skipping trade calculation.")
-                 return
-
-            target_amount_btc = trade_amount_jpy / btc_jpy
-            amount_eth = target_amount_btc / current_price
-
+            
+            # Check current position
+            position = await exchange.get_position(symbol)
+            current_pos_size = position['size'] if position else 0
+            
+            # Logic for Open/Close
             executed = False
-            logger.info(f"Balances - BTC: {btc_free:.6f}, ETH: {eth_free:.6f}")
+            amount_to_trade = 0
+            
             if signal == 'BUY':
-                cost_btc = amount_eth * current_price
-                if btc_free > cost_btc:
-                    logger.info(f"Attempting to BUY {amount_eth} {base_currency}")
-                    order = await binance.create_order(symbol, 'buy', amount_eth)
-                    if order: executed = True
-                else:
-                    logger.warning("Insufficient BTC for BUY")
+                # If we are Short, Close Short first (Buy)
+                if current_pos_size < 0:
+                    logger.info(f"Closing SHORT position of {abs(current_pos_size)}")
+                    await exchange.create_order(symbol, 'buy', abs(current_pos_size))
+                    current_pos_size = 0 # Assumed closed
+                
+                # Open Long if not already Long
+                if current_pos_size == 0:
+                    amount_usd = trade_amount_usd
+                    amount_token = amount_usd / current_price
+                    if free_bal > amount_usd: # Simple check
+                        logger.info(f"Opening LONG: {amount_token} {symbol}")
+                        order = await exchange.create_order(symbol, 'buy', amount_token)
+                        if order: executed = True
+                    else:
+                        logger.warning("Insufficient USDC for Long")
 
             elif signal == 'SELL':
-                if eth_free > amount_eth:
-                    logger.info(f"Attempting to SELL {amount_eth} {base_currency}")
-                    order = await binance.create_order(symbol, 'sell', amount_eth)
-                    if order: executed = True
-                else:
-                    # Only log warning if we haven't logged it recently (optional, but for now just debug)
-                    logger.debug("Insufficient ETH for SELL")
+                # If we are Long, Close Long first (Sell)
+                if current_pos_size > 0:
+                    logger.info(f"Closing LONG position of {current_pos_size}")
+                    await exchange.create_order(symbol, 'sell', current_pos_size)
+                    current_pos_size = 0 # Assumed closed
+                
+                # Open Short if not already Short (and if strategy allows shorting)
+                if current_pos_size == 0:
+                    amount_usd = trade_amount_usd
+                    amount_token = amount_usd / current_price
+                    if free_bal > amount_usd:
+                        logger.info(f"Opening SHORT: {amount_token} {symbol}")
+                        order = await exchange.create_order(symbol, 'sell', amount_token)
+                        if order: executed = True
+                    else:
+                        logger.warning("Insufficient USDC for Short")
             
             if executed:
-                embed = DiscordEmbedGenerator.create_trade_embed(signal, symbol, current_price, amount_eth, trade_amount_jpy, "coffin299")
+                embed = DiscordEmbedGenerator.create_trade_embed(signal, symbol, current_price, amount_to_trade, trade_amount_usd, "HyperTrend")
                 channel = bot.get_channel(config['discord']['trade_channel_id'])
                 if channel:
                     await channel.send(embed=embed)
-                else:
-                    logger.error("Trade Channel ID not found or bot cannot access it.")
                 
                 # Broadcast Trade
                 await broadcast_update({
@@ -269,20 +255,18 @@ async def trading_loop():
 
 @trading_loop.before_loop
 async def before_trading_loop():
-    # Do not wait for bot to be ready, so trading can continue offline
     pass
 
 @app.get("/api/history")
 async def get_history():
-    global binance, config
-    if not binance:
+    global exchange, config
+    if not exchange:
         return []
     
     try:
         symbol = config['trading']['symbol']
         timeframe = config['trading']['timeframe']
-        # Fetch last 100 candles
-        df = await binance.get_ohlcv(symbol, timeframe=timeframe, limit=100)
+        df = await exchange.get_ohlcv(symbol, timeframe=timeframe, limit=100)
         
         if df.empty:
             return []
@@ -330,7 +314,6 @@ async def main():
 
 if __name__ == "__main__":
     try:
-        # Fix for Windows Event Loop Policy if needed
         if os.name == 'nt':
             asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
         asyncio.run(main())
