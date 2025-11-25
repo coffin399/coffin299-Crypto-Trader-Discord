@@ -7,17 +7,19 @@ logger = setup_logger("trade_xyz")
 class TradeXYZ(BaseExchange):
     def __init__(self, config):
         super().__init__(config)
-        self.api_key = config.get('exchanges', {}).get('trade_xyz', {}).get('api_key')
-        self.secret = config.get('exchanges', {}).get('trade_xyz', {}).get('api_secret')
+        
+        # Trade.xyz uses Hyperliquid API
+        self.wallet_address = config.get('exchanges', {}).get('trade_xyz', {}).get('wallet_address')
+        self.private_key = config.get('exchanges', {}).get('trade_xyz', {}).get('private_key')
         self.testnet = config.get('exchanges', {}).get('trade_xyz', {}).get('testnet', False)
         
-        # Defaulting to Binance as the underlying engine for "trade.xyz"
-        # Change 'binance' to the specific ccxt id if trade.xyz is supported
-        self.exchange = ccxt.binance({
-            'apiKey': self.api_key,
-            'secret': self.secret,
+        # Initialize CCXT Hyperliquid
+        # CCXT mapping: apiKey -> walletAddress, secret -> privateKey
+        self.exchange = ccxt.hyperliquid({
+            'apiKey': self.wallet_address,
+            'secret': self.private_key,
             'enableRateLimit': True,
-            'options': {'defaultType': 'spot'} # or future
+            'options': {'defaultType': 'swap'} # Hyperliquid is primarily perps
         })
         self.exchange.set_sandbox_mode(self.testnet)
 

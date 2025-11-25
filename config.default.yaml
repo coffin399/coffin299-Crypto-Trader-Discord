@@ -24,9 +24,9 @@ active_exchange: "trade_xyz"
 
 exchanges:
   trade_xyz:
-    api_key: "YOUR_API_KEY"
-    api_secret: "YOUR_API_SECRET"
-    passphrase: "YOUR_PASSPHRASE"  # If required
+    # Trade.xyz uses Hyperliquid API
+    wallet_address: "YOUR_WALLET_ADDRESS"
+    private_key: "YOUR_PRIVATE_KEY"
     testnet: true
 
   hyperliquid:

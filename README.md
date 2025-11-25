@@ -48,6 +48,24 @@ Google GenAI (Gemini) を搭載した、自律型暗号資産トレーディン�
 | `discord.bot_token` | Discord Bot Token |
 | `discord.channels` | `trade_alerts` (売買), `wallet_updates` (残高) のID |
 
+## 🔑 APIキーの取得方法
+
+### 1. Trade.xyz (Hyperliquid API)
+Trade.xyz は **Hyperliquid API** を使用します。
+1. [Trade.xyz](https://trade.xyz/) または [Hyperliquid](https://app.hyperliquid.xyz/) にウォレットを接続します。
+2. **API** セクションで **API Wallet** を作成します。
+3. **Wallet Address** と **Private Key** を `config.yaml` の `trade_xyz` セクションに設定します。
+
+### 2. Hyperliquid (DEX)
+1. [Hyperliquid](https://app.hyperliquid.xyz/) にウォレットを接続します。
+2. **API** セクションに移動し、**API Wallet** を作成します。
+3. 表示される **Wallet Address** と **Private Key** を `config.yaml` に設定します。
+
+### 3. Google Gemini
+1. [Google AI Studio](https://aistudio.google.com/) にアクセスします。
+2. **Get API key** をクリックします。
+3. **Create API key** でキーを発行し、`config.yaml` の `ai.api_keys` に追加します。
+
 ## ⚠️ 免責事項
 
 このソフトウェアは実験的なものであり、実際の取引に使用する場合は自己責任で行ってください。
