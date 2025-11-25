@@ -7,8 +7,8 @@ logger = setup_logger("exchange_base")
 class BaseExchange(ABC):
     def __init__(self, config):
         self.config = config
-        self.paper_mode = config.get('paper_mode', {}).get('enabled', False)
-        self.paper_balance = config.get('paper_mode', {}).get('initial_balance', {})
+        self.paper_mode = config.get('strategy', {}).get('paper_mode', {}).get('enabled', False)
+        self.paper_balance = config.get('strategy', {}).get('paper_mode', {}).get('initial_balance', {})
         self.positions = {} # {pair: {amount: float, entry_price: float}}
         
         if self.paper_mode:

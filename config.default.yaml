@@ -19,8 +19,8 @@ webui:
 # ------------------------------------------------------------------------------
 # Exchange Settings
 # ------------------------------------------------------------------------------
-# Select the active client: "trade_xyz" or "hyperliquid"
-active_exchange: "trade_xyz"
+# Select the active client: "trade_xyz", "hyperliquid", or "binance_japan"
+active_exchange: "binance_japan"
 
 exchanges:
   trade_xyz:
@@ -28,6 +28,13 @@ exchanges:
     wallet_address: "YOUR_WALLET_ADDRESS"
     private_key: "YOUR_PRIVATE_KEY"
     testnet: true
+
+  binance_japan:
+    api_key: "YOUR_BJ_API_KEY"
+    api_secret: "YOUR_BJ_API_SECRET"
+    testnet: false # Binance Japan usually doesn't have a separate testnet, use carefully
+    # Quote currency for strategy (e.g. BTC, ETH, JPY)
+    quote_currency: "BTC"
 
   hyperliquid:
     wallet_address: "YOUR_WALLET_ADDRESS"

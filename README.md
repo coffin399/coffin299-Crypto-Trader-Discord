@@ -42,17 +42,23 @@ Google GenAI (Gemini) を搭載した、自律型暗号資産トレーディン�
 
 | 項目 | 説明 |
 | :--- | :--- |
-| `active_exchange` | 使用する取引所 (`trade_xyz` または `hyperliquid`) |
+| `active_exchange` | 使用する取引所 (`trade_xyz`, `hyperliquid`, `binance_japan`) |
 | `strategy.paper_mode` | `true` でデモトレード、`false` で実弾トレード |
 | `ai.api_keys` | Gemini APIキーのリスト（ローテーション用） |
 | `discord.bot_token` | Discord Bot Token |
 | `discord.channels` | `trade_alerts` (売買), `wallet_updates` (残高) のID |
+| `exchanges.binance_japan.quote_currency` | Binance Japan時の基軸通貨 (BTC, ETH) |
 
 ## 🔑 APIキーの取得方法
 
+> [!IMPORTANT]
+> **Trade.xyz は Hyperliquid のシステムを使用しています**
+> そのため、APIキー（API Wallet）は **Hyperliquid の公式サイト** から取得する必要があります。
+> `config.yaml` の `trade_xyz` 設定には、Hyperliquid で発行した **API Wallet Address** と **Private Key** を入力してください。
+
 ### 1. Trade.xyz (Hyperliquid API)
 Trade.xyz は **Hyperliquid API** を使用します。
-1. [Trade.xyz](https://trade.xyz/) または [Hyperliquid](https://app.hyperliquid.xyz/) にウォレットを接続します。
+1. [Hyperliquid](https://app.hyperliquid.xyz/) にウォレットを接続します。
 2. **API** セクションで **API Wallet** を作成します。
 3. **Wallet Address** と **Private Key** を `config.yaml` の `trade_xyz` セクションに設定します。
 
@@ -65,6 +71,12 @@ Trade.xyz は **Hyperliquid API** を使用します。
 1. [Google AI Studio](https://aistudio.google.com/) にアクセスします。
 2. **Get API key** をクリックします。
 3. **Create API key** でキーを発行し、`config.yaml` の `ai.api_keys` に追加します。
+
+### 4. Binance Japan (binance_japan)
+1. [Binance Japan](https://www.binance.com/ja) にログインします。
+2. **API管理** からAPIキーを作成します。
+3. **API Key** と **Secret Key** を `config.yaml` の `binance_japan` セクションに設定します。
+   - ※ `Spot & Margin Trading` の権限を有効にしてください。
 
 ## ⚠️ 免責事項
 

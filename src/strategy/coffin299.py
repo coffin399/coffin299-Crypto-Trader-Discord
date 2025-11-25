@@ -13,6 +13,13 @@ class Coffin299Strategy:
         self.notifier = notifier
         
         self.target_pair = "ETH/USDC" # Default
+        
+        # Adjust for Binance Japan (No stablecoins)
+        if config.get('active_exchange') == 'binance_japan':
+            quote = config.get('exchanges', {}).get('binance_japan', {}).get('quote_currency', 'BTC')
+            self.target_pair = f"ETH/{quote}"
+            logger.info(f"Binance Japan Mode: Target Pair set to {self.target_pair}")
+            
         self.last_gemini_poll = datetime.min
         self.gemini_interval = timedelta(minutes=config['ai']['polling_interval_minutes'])
         self.timeframe = config['strategy']['timeframe']
