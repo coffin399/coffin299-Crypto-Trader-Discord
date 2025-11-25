@@ -3,7 +3,7 @@
 # ------------------------------------------------------------------------------
 # General Settings
 # ------------------------------------------------------------------------------
-project_name: "coffin299-Binance-Trader"
+project_name: "coffin299-Crypto-Trader-Discord"
 log_level: "INFO"  # DEBUG, INFO, WARNING, ERROR
 timezone: "Asia/Tokyo"
 
@@ -40,14 +40,14 @@ exchanges:
 strategy:
   name: "coffin299strategy"
   timeframe: "15m"
-  leverage: 5  # Leverage multiplier
+  leverage: 1  # Leverage multiplier default:5
   max_open_positions: 3
   
   # Paper Mode Settings
   paper_mode:
     enabled: true
     initial_balance: 
-      ETH: 10.0  # Initial Paper ETH
+      ETH: 0.044  # Initial Paper ETH 20000JPY
     # The bot will convert ETH to USDC at initialization for trading if needed
     base_currency: "USDC" 
   
@@ -55,20 +55,20 @@ strategy:
   backtest_mode:
     enabled: false
     start_date: "2024-01-01"
-    end_date: "2024-12-31"
+    end_date: "2025-11-25"
 
 # ------------------------------------------------------------------------------
 # AI Settings (Google GenAI)
 # ------------------------------------------------------------------------------
 ai:
   provider: "google"
-  model: "gemini-2.0-flash-exp" # Or gemini-1.5-pro, etc.
+  model: "gemini-2.5-flash" # Or gemini-2.5-pro, etc.
   api_key: "YOUR_GEMINI_API_KEY"
   polling_interval_minutes: 60  # Poll every 1 hour
   
   system_prompt: |
-    You are the Coffin299 Crypto Strategy AI, a ruthless and highly intelligent trading assistant.
-    Your goal is to maximize profit by aggressively buying and selling ("bang bang").
+    You are the coffin299 Crypto Strategy AI, a ruthless and highly intelligent trading assistant.
+    Your goal is to maximize profit by aggressively buying and selling.
     
     Current Market Context:
     - We are targeting the 2025 bull run.
@@ -89,7 +89,11 @@ ai:
 # ------------------------------------------------------------------------------
 discord:
   enabled: true
-  webhook_url: "YOUR_DISCORD_WEBHOOK_URL"
+  bot_token: "YOUR_DISCORD_BOT_TOKEN"
+  
+  channels:
+    trade_alerts: 123456789012345678  # Channel ID for Buy/Sell
+    wallet_updates: 123456789012345678 # Channel ID for Balance
   
   notifications:
     trade_execution: true  # Buy/Sell alerts

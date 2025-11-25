@@ -9,3 +9,4 @@ websockets
 python-dotenv
 requests
 ccxt
+discord.py

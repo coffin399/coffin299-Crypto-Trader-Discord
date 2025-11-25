@@ -90,6 +90,14 @@ class Coffin299Strategy:
             reason = f"RSI {current_rsi:.2f} > 70 or Gemini SELL"
             
         if action == "BUY":
+            # Check max open positions
+            max_positions = self.config['strategy'].get('max_open_positions', 3)
+            current_positions = len(self.exchange.positions)
+            
+            if max_positions > 0 and current_positions >= max_positions:
+                logger.info(f"Skipping BUY: Max positions reached ({current_positions}/{max_positions})")
+                return
+
             # Check balance (Base currency, e.g. USDC)
             # For demo, assume we buy 10% of available quote
             # This needs proper balance checking logic
