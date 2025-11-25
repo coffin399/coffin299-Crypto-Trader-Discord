@@ -21,6 +21,7 @@ class Coffin299Strategy:
             logger.info(f"Binance Japan Mode: Target Pair set to {self.target_pair}")
             
         self.last_gemini_poll = datetime.min
+        self.last_hourly_report = datetime.utcnow()
         self.gemini_interval = timedelta(minutes=config['ai']['polling_interval_minutes'])
         self.timeframe = config['strategy']['timeframe']
         
@@ -33,6 +34,11 @@ class Coffin299Strategy:
         """
         now = datetime.utcnow()
         
+        # 0. Hourly Report
+        if now - self.last_hourly_report > timedelta(hours=1):
+            await self.report_hourly_status()
+            self.last_hourly_report = now
+        
         # 1. Poll Gemini if needed
         if now - self.last_gemini_poll > self.gemini_interval:
             await self.poll_gemini()
@@ -40,6 +46,62 @@ class Coffin299Strategy:
             
         # 2. Execute Trading Logic on Target Pair
         await self.execute_trading_logic(self.target_pair)
+
+    async def report_hourly_status(self):
+        """
+        Sends an hourly update of the wallet balance.
+        """
+        try:
+            balance = await self.exchange.get_balance()
+            # Calculate total value in JPY (Approximate)
+            # This requires fetching rates for all assets, which might be heavy.
+            # For now, we'll try to get the quote currency total and convert to JPY if possible.
+            
+            total_balance_jpy = 0
+            changes = {}
+            
+            # Simple estimation: Get BTC/JPY or ETH/JPY rate
+            jpy_rate = 1.0
+            quote_currency = "BTC" # Default
+            
+            if self.config.get('active_exchange') == 'binance_japan':
+                 quote_currency = self.config.get('exchanges', {}).get('binance_japan', {}).get('quote_currency', 'BTC')
+            
+            # Try to get JPY rate for the quote currency
+            try:
+                if quote_currency != "JPY":
+                    jpy_pair = f"{quote_currency}/JPY"
+                    jpy_rate = await self.exchange.get_market_price(jpy_pair)
+            except Exception:
+                logger.warning(f"Could not fetch {quote_currency}/JPY rate. Using 1.0")
+            
+            # Sum up balances (very simplified)
+            # ideally we iterate over all non-zero balances
+            if isinstance(balance, dict):
+                 # This depends on the exchange response structure (ccxt vs others)
+                 # CCXT 'total' key usually holds the total balances
+                 total_assets = balance.get('total', {})
+                 for asset, amount in total_assets.items():
+                     if amount > 0:
+                         # Convert to quote then JPY
+                         asset_val_in_quote = 0
+                         if asset == quote_currency:
+                             asset_val_in_quote = amount
+                         else:
+                             try:
+                                 price = await self.exchange.get_market_price(f"{asset}/{quote_currency}")
+                                 asset_val_in_quote = amount * price
+                             except:
+                                 pass # Skip if no pair
+                         
+                         total_balance_jpy += asset_val_in_quote * jpy_rate
+                         changes[asset] = f"{amount:.4f}"
+
+            await self.notifier.notify_balance(total_balance_jpy, "JPY", changes)
+            logger.info(f"Hourly Report Sent. Total Est: {total_balance_jpy} JPY")
+
+        except Exception as e:
+            logger.error(f"Failed to send hourly report: {e}")
 
     async def poll_gemini(self):
         logger.info("Polling Gemini for strategic direction...")
@@ -108,14 +170,53 @@ class Coffin299Strategy:
             # Check balance (Base currency, e.g. USDC)
             # For demo, assume we buy 10% of available quote
             # This needs proper balance checking logic
-            await self.exchange.create_order(pair, 'market', 'buy', 0.001, current_price) # Mock amount
-            await self.notifier.notify_trade("BUY", pair, current_price, 0.001, reason)
+            try:
+                amount = 0.001 # Mock amount
+                order = await self.exchange.create_order(pair, 'market', 'buy', amount, current_price)
+                if order:
+                    # Calculate JPY value
+                    total_jpy = await self._calculate_jpy_value(pair, amount, current_price)
+                    await self.notifier.notify_trade("BUY", pair, current_price, amount, reason, total_jpy=total_jpy)
+            except Exception as e:
+                logger.error(f"BUY Order Failed: {e}")
             
         elif action == "SELL":
             # Check if we have the asset
             # This needs proper balance checking logic
-            await self.exchange.create_order(pair, 'market', 'sell', 0.001, current_price) # Mock amount
-            await self.notifier.notify_trade("SELL", pair, current_price, 0.001, reason)
+            try:
+                amount = 0.001 # Mock amount
+                # TODO: Check actual balance of the asset before selling
+                
+                order = await self.exchange.create_order(pair, 'market', 'sell', amount, current_price)
+                if order:
+                    # Calculate JPY value
+                    total_jpy = await self._calculate_jpy_value(pair, amount, current_price)
+                    await self.notifier.notify_trade("SELL", pair, current_price, amount, reason, total_jpy=total_jpy)
+            except Exception as e:
+                logger.error(f"SELL Order Failed: {e}")
+
+    async def _calculate_jpy_value(self, pair, amount, price):
+        """
+        Calculates the JPY value of a trade.
+        """
+        try:
+            # pair is like ETH/BTC
+            base, quote = pair.split('/')
+            
+            # Value in quote currency
+            val_in_quote = amount * price
+            
+            if quote == "JPY":
+                return val_in_quote
+            
+            # Fetch Quote/JPY rate (e.g. BTC/JPY)
+            jpy_pair = f"{quote}/JPY"
+            jpy_rate = await self.exchange.get_market_price(jpy_pair)
+            
+            return val_in_quote * jpy_rate
+        except Exception as e:
+            logger.warning(f"Failed to calculate JPY value: {e}")
+            return None
 
     def calculate_rsi(self, series, period=14):
         delta = series.diff()

@@ -80,7 +80,7 @@ class DiscordNotifier:
         except Exception as e:
             logger.error(f"Failed to send embed: {e}")
 
-    async def notify_trade(self, action, pair, price, quantity, reason, pnl=None, currency="JPY"):
+    async def notify_trade(self, action, pair, price, quantity, reason, pnl=None, currency="JPY", total_jpy=None):
         """
         Sends trade alerts to the 'trade_alerts' channel.
         """
@@ -89,8 +89,12 @@ class DiscordNotifier:
             {"name": "Pair", "value": pair, "inline": True},
             {"name": "Price", "value": f"{price}", "inline": True},
             {"name": "Quantity", "value": f"{quantity}", "inline": True},
-            {"name": "Reason", "value": reason, "inline": False}
         ]
+        
+        if total_jpy:
+             fields.append({"name": "Total Value (JPY)", "value": f"¥{total_jpy:,.0f}", "inline": True})
+             
+        fields.append({"name": "Reason", "value": reason, "inline": False})
         
         if pnl:
              fields.append({"name": "PnL", "value": f"{pnl} {currency}", "inline": True})
