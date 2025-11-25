@@ -9,11 +9,11 @@ Google GenAI (Gemini) を搭載した、自律型暗号資産トレーディン�
 - **🔄 APIキーローテーション**: 複数のGemini APIキーを登録し、リクエストごとに自動で切り替えることでレート制限を回避します。
 - **💻 モダンWebUI**: スタイリッシュなダークテーマのダッシュボード（ポート8088）で、資産状況やAIの判断をリアルタイムに可視化します。
 - **📢 Discord Bot連携**:
-  - **Trade Alerts**: 売買実行時に通知
-  - **Wallet Updates**: 1時間ごとの資産状況（JPY換算）を通知
+  - **Trade Alerts**: 売買実行時にDiscordに通知
+  - **Wallet Updates**: 1時間ごとの資産状況（JPY換算）をDiscordに通知
   - チャンネルを個別に設定可能
 - **💸 資金管理**:
-  - **Paper Mode**: ETHを元手としたデモトレード機能（初期設定: 10 ETH）。
+  - **Paper Mode**: ETHを元手としたデモトレード機能（初期設定: 0.044 ETH 約2万円）。
   - **Base Currency**: ETH基軸で運用し、USDC建てで取引を行います。
 
 ## 🚀 インストールと起動
