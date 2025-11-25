@@ -6,6 +6,8 @@ import uvicorn
 import asyncio
 import sys
 import os
+from contextlib import asynccontextmanager
+import webbrowser
 
 # Add project root to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -22,20 +24,14 @@ from src.strategy.coffin299 import Coffin299Strategy
 logger = setup_logger("web_server")
 config = load_config()
 
-app = FastAPI()
-
-# Mount static files
-app.mount("/static", StaticFiles(directory="web/static"), name="static")
-templates = Jinja2Templates(directory="web/templates")
-
 # Global Bot State
 bot_state = {
     "strategy": None,
     "exchange": None
 }
 
-@app.on_event("startup")
-async def startup_event():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     logger.info("Initializing Bot Components...")
     
     # Init Exchange
@@ -56,19 +52,29 @@ async def startup_event():
     )
     
     # Init Discord
-    discord = DiscordNotifier(
-        webhook_url=config['discord']['webhook_url'],
-        enabled=config['discord']['enabled']
-    )
+    discord_notifier = DiscordNotifier(config)
+    await discord_notifier.start()
     
     # Init Strategy
-    strategy = Coffin299Strategy(config, exchange, ai, discord)
+    strategy = Coffin299Strategy(config, exchange, ai, discord_notifier)
     
     bot_state["strategy"] = strategy
     bot_state["exchange"] = exchange
     
     # Start Strategy Loop Task
-    asyncio.create_task(run_strategy_loop(strategy))
+    task = asyncio.create_task(run_strategy_loop(strategy))
+    
+    yield
+    
+    # Cleanup if needed
+    task.cancel()
+    await exchange.close()
+
+app = FastAPI(lifespan=lifespan)
+
+# Mount static files
+app.mount("/static", StaticFiles(directory="web/static"), name="static")
+templates = Jinja2Templates(directory="web/templates")
 
 async def run_strategy_loop(strategy):
     logger.info("Starting Strategy Loop Background Task...")
@@ -100,8 +106,6 @@ async def get_status():
         "balance": balance,
         "paper_mode": exchange.paper_mode
     }
-
-import webbrowser
 
 if __name__ == "__main__":
     url = f"http://{config['webui']['host']}:{config['webui']['port']}"
