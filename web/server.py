@@ -45,8 +45,9 @@ async def startup_event():
         exchange = TradeXYZ(config)
         
     # Init AI
+    api_keys = config['ai'].get('api_keys') or config['ai'].get('api_key')
     ai = GeminiService(
-        api_key=config['ai']['api_key'],
+        api_keys=api_keys,
         model_name=config['ai']['model'],
         system_prompt=config['ai']['system_prompt']
     )

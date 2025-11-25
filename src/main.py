@@ -61,8 +61,11 @@ async def start_bot():
         exchange = TradeXYZ(config)
         
     # Init AI
+    # Support both single key and list for backward compatibility
+    api_keys = config['ai'].get('api_keys') or config['ai'].get('api_key')
+    
     ai = GeminiService(
-        api_key=config['ai']['api_key'],
+        api_keys=api_keys,
         model_name=config['ai']['model'],
         system_prompt=config['ai']['system_prompt']
     )

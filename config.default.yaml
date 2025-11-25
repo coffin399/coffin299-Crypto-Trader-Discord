@@ -62,8 +62,11 @@ strategy:
 # ------------------------------------------------------------------------------
 ai:
   provider: "google"
-  model: "gemini-2.5-flash" # Or gemini-2.5-pro, etc.
-  api_key: "YOUR_GEMINI_API_KEY"
+  model: "gemini-2.5-pro" # Or gemini-2.5-flash or 3.0 exp, etc.
+  api_keys: 
+    - "YOUR_GEMINI_API_KEY_1"
+    - "YOUR_GEMINI_API_KEY_2"
+  # api_key: "YOUR_GEMINI_API_KEY" # Deprecated, use api_keys list
   polling_interval_minutes: 60  # Poll every 1 hour
   
   system_prompt: |

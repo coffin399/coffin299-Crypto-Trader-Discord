@@ -5,15 +5,16 @@ Google GenAI (Gemini) を搭載した、自律型暗号資産トレーディン�
 
 ## ✨ 主な機能
 
-- **🧠 AI駆動戦略**: Google Gemini 2.0 Flash Exp を使用し、市場データを分析して売買判断（LONG/SHORT）を行います。
+- **🧠 AI駆動戦略**: Google Gemini 2.5 Flash を使用し、市場データを分析して売買判断（LONG/SHORT）を行います。
+- **🔄 APIキーローテーション**: 複数のGemini APIキーを登録し、リクエストごとに自動で切り替えることでレート制限を回避します。
 - **💻 モダンWebUI**: スタイリッシュなダークテーマのダッシュボード（ポート8088）で、資産状況やAIの判断をリアルタイムに可視化します。
-- **📢 Discord連携**: 取引の実行通知や、1時間ごとの資産状況（JPY換算）をDiscordに通知します。
-- **🔄 マルチエクスチェンジ**:
-  - **Trade.xyz**: メイン取引所（Binance API互換として実装）
-  - **Hyperliquid**: 次世代DEX（現在はPaper Modeのみ対応）
+- **📢 Discord Bot連携**:
+  - **Trade Alerts**: 売買実行時に通知
+  - **Wallet Updates**: 1時間ごとの資産状況（JPY換算）を通知
+  - チャンネルを個別に設定可能
 - **💸 資金管理**:
-  - **Paper Mode**: 仮想資金（BTC/USDC）を使用したデモトレード機能。
-  - **Backtest Mode**: 過去データに基づいた検証モード（実装予定）。
+  - **Paper Mode**: ETHを元手としたデモトレード機能（初期設定: 10 ETH）。
+  - **Base Currency**: ETH基軸で運用し、USDC建てで取引を行います。
 
 ## 🚀 インストールと起動
 
@@ -28,9 +29,9 @@ Google GenAI (Gemini) を搭載した、自律型暗号資産トレーディン�
 
 2. **設定ファイルの編集**
    `config.default.yaml` を `config.yaml` という名前でコピーし、以下の項目を設定してください。
-   - **API Keys**: 取引所およびGoogle GeminiのAPIキー
-   - **Discord Webhook**: 通知用URL
-   - **Strategy**: レバレッジやタイムフレーム設定
+   - **ai.api_keys**: Gemini APIキーのリスト（複数登録推奨）
+   - **discord.bot_token**: Discord Botのトークン
+   - **discord.channels**: 通知先のチャンネルID
 
 3. **起動**
    `run_bot.bat` をダブルクリックして実行してください。
@@ -43,8 +44,9 @@ Google GenAI (Gemini) を搭載した、自律型暗号資産トレーディン�
 | :--- | :--- |
 | `active_exchange` | 使用する取引所 (`trade_xyz` または `hyperliquid`) |
 | `strategy.paper_mode` | `true` でデモトレード、`false` で実弾トレード |
-| `ai.polling_interval_minutes` | AIが市場分析を行う間隔（デフォルト: 60分） |
-| `discord.enabled` | Discord通知のON/OFF |
+| `ai.api_keys` | Gemini APIキーのリスト（ローテーション用） |
+| `discord.bot_token` | Discord Bot Token |
+| `discord.channels` | `trade_alerts` (売買), `wallet_updates` (残高) のID |
 
 ## ⚠️ 免責事項
 
