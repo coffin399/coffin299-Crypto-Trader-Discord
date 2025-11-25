@@ -36,6 +36,6 @@ if %errorlevel% neq 0 (
 
 REM Run the bot
 echo Starting Coffin299 Binance Trader...
-python main.py
+python web/server.py
 
 pause

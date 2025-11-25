@@ -1,12 +1,11 @@
-ccxt>=4.0.0
+aiohttp
 pandas
 numpy
 pyyaml
-requests
-python-dotenv
-ta
-discord.py
+google-generativeai
 fastapi
 uvicorn
 websockets
-jinja2
+python-dotenv
+requests
+ccxt

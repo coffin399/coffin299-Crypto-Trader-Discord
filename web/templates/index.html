@@ -1,79 +1,72 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Coffin299 Trader</title>
-    <link rel="stylesheet" href="/static/css/style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
-    <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+    <title>{{ title }}</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
 </head>
-
 <body>
-    <div class="container">
-        <header>
-            <div class="logo">COFFIN299 TRADER</div>
-            <div class="status">
-                <div class="status-dot"></div>
-                <span>SYSTEM ONLINE</span>
+    <div class="app-container">
+        <header class="glass-header">
+            <div class="logo">
+                <i data-lucide="skull"></i>
+                <span>Coffin299 Trader</span>
             </div>
+            <div class="status-badge" id="bot-status">Initializing...</div>
         </header>
 
-        <div class="dashboard">
-            <!-- Wallet Card -->
-            <div class="card">
+        <main class="dashboard-grid">
+            <!-- Balance Card -->
+            <div class="card glass-card balance-card">
                 <h2>Total Balance</h2>
-                <div class="value-display" id="total-value">¥0</div>
-                <div class="sub-value" id="pnl">¥0</div>
+                <div class="balance-amount" id="balance-display">Loading...</div>
+                <div class="balance-sub" id="balance-detail">BTC / USDC</div>
             </div>
 
             <!-- Strategy Card -->
-            <div class="card">
+            <div class="card glass-card strategy-card">
                 <h2>Active Strategy</h2>
-                <div class="value-display" style="font-size: 1.5rem;">RSI + Bollinger</div>
-                <div class="sub-value">ETH/BTC Circulation</div>
-            </div>
-
-            <!-- Chart -->
-            <div class="card chart-container">
-                <h2>Live Market</h2>
-                <div id="chart" style="width: 100%; height: 100%;"></div>
-            </div>
-
-            <!-- Active Positions -->
-            <div class="card positions-container">
-                <h2>Active Positions</h2>
-                <div class="table-responsive">
-                    <table id="positions-table">
-                        <thead>
-                            <tr>
-                                <th>Symbol</th>
-                                <th>Size</th>
-                                <th>Entry Price</th>
-                                <th>PnL</th>
-                            </tr>
-                        </thead>
-                        <tbody id="positions-body">
-                            <!-- Positions will appear here -->
-                            <tr>
-                                <td colspan="4" style="text-align:center; color: #666;">No active positions</td>
-                            </tr>
-                        </tbody>
-                    </table>
+                <div class="strategy-info">
+                    <div class="info-row">
+                        <span class="label">Target Pair</span>
+                        <span class="value" id="target-pair">---</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="label">AI Signal</span>
+                        <span class="value signal-neutral" id="ai-signal">WAITING</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="label">Confidence</span>
+                        <span class="value" id="ai-confidence">---</span>
+                    </div>
                 </div>
             </div>
 
-            <!-- Recent Trades -->
-            <div class="card trades-container">
-                <h2>Recent Trades</h2>
-                <div id="trade-list">
-                    <!-- Trades will appear here -->
+            <!-- Chart Area (Placeholder) -->
+            <div class="card glass-card chart-card">
+                <h2>Market Overview</h2>
+                <div class="chart-placeholder">
+                    <!-- TradingView Widget could go here -->
+                    <p>Chart Visualization Area</p>
                 </div>
             </div>
-        </div>
+
+            <!-- Logs / Activity -->
+            <div class="card glass-card logs-card">
+                <h2>Activity Log</h2>
+                <ul class="log-list" id="log-list">
+                    <li>System initialized...</li>
+                </ul>
+            </div>
+        </main>
     </div>
-    <script src="/static/js/app.js"></script>
-</body>
 
+    <script src="/static/app.js"></script>
+    <script>
+        lucide.createIcons();
+    </script>
+</body>
 </html>

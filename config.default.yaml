@@ -1,37 +1,109 @@
-# Hyperliquid Configuration
-hyperliquid:
-  wallet_address: "YOUR_WALLET_ADDRESS"
-  wallet_private_key: "YOUR_PRIVATE_KEY"
-  testnet: false # Hyperliquid Testnet (Arbitrum Goerli/Sepolia)
+# Coffin299 Trader Configuration
 
-# Discord Configuration
+# ------------------------------------------------------------------------------
+# General Settings
+# ------------------------------------------------------------------------------
+project_name: "coffin299-Binance-Trader"
+log_level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+timezone: "Asia/Tokyo"
+
+# ------------------------------------------------------------------------------
+# Web UI Settings
+# ------------------------------------------------------------------------------
+webui:
+  enabled: true
+  port: 8088
+  host: "0.0.0.0"
+  theme: "modern_dark"  # Options: modern_dark, cyberpunk
+
+# ------------------------------------------------------------------------------
+# Exchange Settings
+# ------------------------------------------------------------------------------
+# Select the active client: "trade_xyz" or "hyperliquid"
+active_exchange: "trade_xyz"
+
+exchanges:
+  trade_xyz:
+    api_key: "YOUR_API_KEY"
+    api_secret: "YOUR_API_SECRET"
+    passphrase: "YOUR_PASSPHRASE"  # If required
+    testnet: true
+
+  hyperliquid:
+    wallet_address: "YOUR_WALLET_ADDRESS"
+    private_key: "YOUR_PRIVATE_KEY"
+    testnet: true
+
+# ------------------------------------------------------------------------------
+# Trading Strategy: Coffin299
+# ------------------------------------------------------------------------------
+strategy:
+  name: "coffin299strategy"
+  timeframe: "15m"
+  leverage: 5  # Leverage multiplier
+  max_open_positions: 3
+  
+  # Paper Mode Settings
+  paper_mode:
+    enabled: true
+    initial_balance: 
+      ETH: 10.0  # Initial Paper ETH
+    # The bot will convert ETH to USDC at initialization for trading if needed
+    base_currency: "USDC" 
+  
+  # Backtest Mode
+  backtest_mode:
+    enabled: false
+    start_date: "2024-01-01"
+    end_date: "2024-12-31"
+
+# ------------------------------------------------------------------------------
+# AI Settings (Google GenAI)
+# ------------------------------------------------------------------------------
+ai:
+  provider: "google"
+  model: "gemini-2.0-flash-exp" # Or gemini-1.5-pro, etc.
+  api_key: "YOUR_GEMINI_API_KEY"
+  polling_interval_minutes: 60  # Poll every 1 hour
+  
+  system_prompt: |
+    You are the Coffin299 Crypto Strategy AI, a ruthless and highly intelligent trading assistant.
+    Your goal is to maximize profit by aggressively buying and selling ("bang bang").
+    
+    Current Market Context:
+    - We are targeting the 2025 bull run.
+    - Focus on high-volatility, high-potential pairs.
+    - Timeframe: 15 minutes.
+    
+    Directives:
+    1. Analyze the provided market data (OHLCV, Indicators).
+    2. Select the best currency pair to trade for the next hour.
+    3. Decide direction: LONG or SHORT.
+    4. If the current pair is losing momentum, signal a switch.
+    5. Do not recommend selling a currency we do not own (spot) or closing a position we don't have.
+    
+    Output Format: JSON with keys 'action' (BUY/SELL/HOLD), 'pair', 'confidence', 'reasoning'.
+
+# ------------------------------------------------------------------------------
+# Notification Settings (Discord)
+# ------------------------------------------------------------------------------
 discord:
-  token: "YOUR_BOT_TOKEN"
-  trade_channel_id: 123456789012345678  # Channel ID for Buy/Sell notifications
-  summary_channel_id: 123456789012345678  # Channel ID for Hourly Summaries
+  enabled: true
+  webhook_url: "YOUR_DISCORD_WEBHOOK_URL"
+  
+  notifications:
+    trade_execution: true  # Buy/Sell alerts
+    hourly_update: true    # Hourly wallet balance
+    startup: true          # Startup message
+    errors: true
+  
+  display:
+    currency: "JPY"        # Convert values to this currency for display
+    show_balance: true     # Show crypto balance in notifications
 
-# Trading Configuration
-trading:
-  symbol: "ETH/USDC:USDC" # Hyperliquid Perpetual Symbol
-  timeframe: "1m"
-  trade_amount_usd: 100 # Trade amount in USD (USDC)
-  leverage: 1
-  dry_run: true
-  dry_run_initial_capital_usd: 10000
-
-  strategy:
-    name: "HyperTrend"
-    ema_fast: 12
-    ema_slow: 26
-    macd_signal: 9
-    atr_period: 14
-    atr_multiplier_sl: 2.0 # Stop Loss = Entry - (ATR * 2)
-    atr_multiplier_tp: 3.0 # Take Profit = Entry + (ATR * 3)
-    rsi_period: 14
-    rsi_overbought: 70
-    rsi_oversold: 30
-
-# System Configuration
-system:
-  log_level: "INFO"
-  check_interval: 60 # seconds
+# ------------------------------------------------------------------------------
+# Wallet Display Settings
+# ------------------------------------------------------------------------------
+wallet_display:
+  convert_to: "JPY"
+  update_interval_minutes: 60

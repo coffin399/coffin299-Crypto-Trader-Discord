@@ -1,0 +1,41 @@
+import logging
+import sys
+from logging.handlers import RotatingFileHandler
+import os
+
+def setup_logger(name="coffin299", log_level="INFO"):
+    """
+    Sets up a logger with console and file handlers.
+    """
+    logger = logging.getLogger(name)
+    
+    # Convert string level to logging constant
+    level = getattr(logging, log_level.upper(), logging.INFO)
+    logger.setLevel(level)
+    
+    # Formatter
+    formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    
+    # Console Handler
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
+    
+    # File Handler
+    log_dir = "logs"
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir)
+        
+    file_handler = RotatingFileHandler(
+        os.path.join(log_dir, "bot.log"),
+        maxBytes=10*1024*1024,  # 10MB
+        backupCount=5,
+        encoding='utf-8'
+    )
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+    
+    return logger
