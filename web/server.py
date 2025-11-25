@@ -101,5 +101,14 @@ async def get_status():
         "paper_mode": exchange.paper_mode
     }
 
+import webbrowser
+
 if __name__ == "__main__":
+    url = f"http://{config['webui']['host']}:{config['webui']['port']}"
+    if config['webui']['host'] == "0.0.0.0":
+        url = f"http://localhost:{config['webui']['port']}"
+        
+    logger.info(f"Opening browser at {url}")
+    webbrowser.open(url)
+    
     uvicorn.run(app, host=config['webui']['host'], port=config['webui']['port'])

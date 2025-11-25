@@ -10,3 +10,4 @@ python-dotenv
 requests
 ccxt
 discord.py
+jinja2
