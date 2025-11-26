@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -8,6 +9,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/lucide@latest"></script>
 </head>
+
 <body>
     <div class="app-container">
         <header class="glass-header">
@@ -15,7 +17,13 @@
                 <i data-lucide="skull"></i>
                 <span>Coffin299 Trader</span>
             </div>
-            <div class="status-badge" id="bot-status">Initializing...</div>
+            <div class="header-controls">
+                <button id="connect-wallet" class="btn-connect">
+                    <i data-lucide="wallet"></i>
+                    <span>Connect Wallet</span>
+                </button>
+                <div class="status-badge" id="bot-status">Initializing...</div>
+            </div>
         </header>
 
         <main class="dashboard-grid">
@@ -69,4 +77,5 @@
         lucide.createIcons();
     </script>
 </body>
+
 </html>

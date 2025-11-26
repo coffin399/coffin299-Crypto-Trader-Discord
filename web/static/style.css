@@ -62,6 +62,38 @@ body {
     border-radius: 20px;
     font-size: 0.875rem;
     font-weight: 600;
+    font-weight: 600;
+}
+
+.header-controls {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.btn-connect {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    background: rgba(124, 58, 237, 0.2);
+    border: 1px solid var(--accent-color);
+    color: var(--text-primary);
+    border-radius: 8px;
+    cursor: pointer;
+    font-family: inherit;
+    font-weight: 600;
+    transition: all 0.2s;
+}
+
+.btn-connect:hover {
+    background: rgba(124, 58, 237, 0.4);
+}
+
+.btn-connect.connected {
+    background: rgba(16, 185, 129, 0.2);
+    border-color: var(--success-color);
+    color: var(--success-color);
 }
 
 /* Dashboard Grid */

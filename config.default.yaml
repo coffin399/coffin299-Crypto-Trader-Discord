@@ -19,7 +19,7 @@ webui:
 # ------------------------------------------------------------------------------
 # Exchange Settings
 # ------------------------------------------------------------------------------
-# Select the active client: "trade_xyz", "hyperliquid", or "binance_japan"
+# Select the active client: "trade_xyz", "hyperliquid", "binance_japan", or "tread_fi"
 active_exchange: "binance_japan"
 
 exchanges:
@@ -40,6 +40,10 @@ exchanges:
     wallet_address: "YOUR_WALLET_ADDRESS"
     private_key: "YOUR_PRIVATE_KEY"
     testnet: true
+
+  tread_fi:
+    api_key: "YOUR_TREAD_FI_TOKEN"
+    account_names: ["Metamask"] # List of account names configured in Tread.fi
 
 # ------------------------------------------------------------------------------
 # Trading Strategy: Coffin299

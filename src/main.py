@@ -33,6 +33,7 @@ from src.logger import setup_logger
 from src.exchanges.trade_xyz import TradeXYZ
 from src.exchanges.hyperliquid import Hyperliquid
 from src.exchanges.binance_japan import BinanceJapan
+from src.exchanges.tread_fi import TreadFi
 from src.ai.gemini_service import GeminiService
 from src.notifications.discord_bot import DiscordNotifier
 from src.strategy.coffin299 import Coffin299Strategy
@@ -60,6 +61,8 @@ async def start_bot():
         exchange = Hyperliquid(config)
     elif exchange_name == 'binance_japan':
         exchange = BinanceJapan(config)
+    elif exchange_name == 'tread_fi':
+        exchange = TreadFi(config)
     else:
         exchange = TradeXYZ(config)
         
@@ -78,6 +81,10 @@ async def start_bot():
     
     # Start Discord Client
     await discord_notifier.start()
+    
+    # Start Exchange WebSocket if supported
+    if exchange_name == 'tread_fi':
+        asyncio.create_task(exchange.start_websocket())
     
     # Init Strategy
     strategy = Coffin299Strategy(config, exchange, ai, discord_notifier)
