@@ -80,7 +80,8 @@ class Coffin299Strategy:
             if isinstance(balance, dict):
                  # This depends on the exchange response structure (ccxt vs others)
                  # CCXT 'total' key usually holds the total balances
-                 total_assets = balance.get('total', {})
+                 # In paper mode, the balance dict itself is the assets
+                 total_assets = balance.get('total', balance)
                  for asset, amount in total_assets.items():
                      if amount > 0:
                          # Convert to quote then JPY
