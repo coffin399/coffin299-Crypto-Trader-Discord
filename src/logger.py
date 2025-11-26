@@ -2,6 +2,18 @@ import logging
 import sys
 from logging.handlers import RotatingFileHandler
 import os
+from collections import deque
+
+# Global log buffer
+log_buffer = deque(maxlen=50)
+
+class ListHandler(logging.Handler):
+    def emit(self, record):
+        try:
+            msg = self.format(record)
+            log_buffer.append(msg)
+        except Exception:
+            self.handleError(record)
 
 def setup_logger(name="coffin299", log_level="INFO"):
     """
@@ -36,6 +48,12 @@ def setup_logger(name="coffin299", log_level="INFO"):
         encoding='utf-8'
     )
     file_handler.setFormatter(formatter)
+    file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
+    
+    # List Handler (for WebUI)
+    list_handler = ListHandler()
+    list_handler.setFormatter(formatter)
+    logger.addHandler(list_handler)
     
     return logger

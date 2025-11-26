@@ -29,7 +29,14 @@ async function updateStatus() {
                 }
             }
             balanceDisplay.textContent = details.length > 0 ? details[0] : "0.00";
-            balanceDetail.textContent = details.slice(1).join(', ') || "Assets";
+
+            // JPY Display
+            if (data.total_jpy) {
+                const jpyFormatted = new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY' }).format(data.total_jpy);
+                balanceDetail.innerHTML = `${details.slice(1).join(', ') || "Assets"} <br> <span style="color: #a0a0a0; font-size: 0.9em;">Total: ${jpyFormatted}</span>`;
+            } else {
+                balanceDetail.textContent = details.slice(1).join(', ') || "Assets";
+            }
         }
 
         // Update Strategy Info
@@ -45,6 +52,18 @@ async function updateStatus() {
             if (rec.action === 'SELL') signalEl.classList.add('signal-sell');
 
             document.getElementById('ai-confidence').textContent = rec.confidence || "---";
+        }
+
+        // Update Logs
+        if (data.logs && data.logs.length > 0) {
+            const logList = document.getElementById('log-list');
+            logList.innerHTML = ''; // Clear existing
+            // Show last 20 logs reversed
+            data.logs.slice().reverse().slice(0, 20).forEach(log => {
+                const li = document.createElement('li');
+                li.textContent = log;
+                logList.appendChild(li);
+            });
         }
 
     } catch (error) {

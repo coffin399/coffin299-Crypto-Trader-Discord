@@ -13,7 +13,7 @@ import webbrowser
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.config_loader import load_config
-from src.logger import setup_logger
+from src.logger import setup_logger, log_buffer
 from src.exchanges.trade_xyz import TradeXYZ
 from src.exchanges.hyperliquid import Hyperliquid
 from src.exchanges.binance_japan import BinanceJapan
@@ -99,12 +99,51 @@ async def get_status():
         
     balance = await exchange.get_balance()
     
+    # Calculate JPY Total (Simplified)
+    total_jpy = 0
+    # Reuse strategy logic if possible, or simple estimation here
+    # For now, we'll try to use the strategy's helper if available, or just send raw balance
+    # and let frontend handle it? No, backend is better.
+    
+    # Quick dirty JPY calc (assuming 1 USDC = 150 JPY for demo if price fetch fails)
+    # Ideally we use strategy._calculate_jpy_value but that's for trade amount.
+    # Let's try to get a rough estimate.
+    try:
+        # Assuming balance has 'total' key
+        assets = balance.get('total', balance)
+        usdc_val = 0
+        
+        # Get prices
+        eth_price = await exchange.get_market_price("ETH/USDC") or 3000
+        btc_price = await exchange.get_market_price("BTC/USDC") or 90000
+        usdc_jpy = 150 # Mock/Default
+        
+        # Try to fetch USDC/JPY if possible (unlikely on crypto exchange)
+        # So we use a fixed rate or fetch from external? 
+        # For this demo, fixed 150 is fine or we can add it to config.
+        
+        for coin, amount in assets.items():
+            if amount <= 0: continue
+            if coin == 'USDC':
+                usdc_val += amount
+            elif coin == 'ETH':
+                usdc_val += amount * eth_price
+            elif coin == 'BTC':
+                usdc_val += amount * btc_price
+                
+        total_jpy = usdc_val * usdc_jpy
+        
+    except Exception as e:
+        logger.error(f"Error calculating JPY: {e}")
+
     return {
         "status": "Running",
         "target_pair": strategy.target_pair,
         "recommendation": strategy.current_recommendation,
         "balance": balance,
-        "paper_mode": exchange.paper_mode
+        "total_jpy": total_jpy,
+        "paper_mode": exchange.paper_mode,
+        "logs": list(log_buffer)
     }
 
 if __name__ == "__main__":
@@ -115,4 +154,4 @@ if __name__ == "__main__":
     logger.info(f"Opening browser at {url}")
     webbrowser.open(url)
     
-    uvicorn.run(app, host=config['webui']['host'], port=config['webui']['port'])
+    uvicorn.run(app, host=config['webui']['host'], port=config['webui']['port'], log_level="warning")
