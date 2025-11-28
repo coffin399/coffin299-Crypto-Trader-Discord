@@ -78,6 +78,9 @@ class Coffin299CopyStrategy:
                 elif shorts > longs:
                     # SELL
                     await self.execute_copy_trade(symbol, "SELL", f"Copying {shorts}/{total} top traders")
+            
+            # Sleep between symbols to avoid rate limits on price checks
+            await asyncio.sleep(1.0)
 
     async def update_leaderboard(self):
         logger.info("Updating Leaderboard...")
