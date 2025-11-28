@@ -25,8 +25,9 @@ async def main_loop(strategy):
             logger.error(f"Error in strategy cycle: {e}")
         
         # Sleep for configured interval
-        interval = strategy.config['strategy'].get('loop_interval_seconds', 60)
-        logger.info(f"Cycle finished. Waiting {interval}s...")
+        interval = strategy.config['strategy'].get('loop_interval_seconds', 1)
+        if interval > 5:
+            logger.info(f"Cycle finished. Waiting {interval}s...")
         await asyncio.sleep(interval) 
 
 async def start_bot():
