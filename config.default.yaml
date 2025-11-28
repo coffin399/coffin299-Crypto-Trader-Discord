@@ -61,6 +61,7 @@ strategy:
     fallback_addresses: 
       - "0x..." # Add addresses here if API fails
       - "0x..."
+    target_coins: [] # Coins to copy. If empty, copy all.
 
   # Paper Mode Settings
   paper_mode:

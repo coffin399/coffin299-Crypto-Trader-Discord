@@ -50,9 +50,14 @@ class Coffin299CopyStrategy:
             
         # 3. Decide & Execute
         # Logic: If > 50% of top traders are LONG on a coin, we LONG.
-        # For simplicity, we just log the opportunities for now or execute one top conviction.
+        
+        target_coins = self.config['strategy'].get('copy_trading', {}).get('target_coins', [])
         
         for symbol, counts in aggregate_positions.items():
+            # Filter by target coins if specified
+            if target_coins and symbol not in target_coins:
+                continue
+                
             longs = counts['LONG']
             shorts = counts['SHORT']
             total = longs + shorts
