@@ -91,7 +91,7 @@ async def run_strategy_loop(strategy):
             await strategy.run_cycle()
         except Exception as e:
             logger.error(f"Error in strategy cycle: {e}")
-        await asyncio.sleep(60) # 1 min loop for demo
+        await asyncio.sleep(2) # 2 sec loop for high frequency copy
 
 @app.get("/", response_class=HTMLResponse)
 async def read_root(request: Request):

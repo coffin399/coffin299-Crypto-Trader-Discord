@@ -46,7 +46,9 @@ class Coffin299CopyStrategy:
                 
                 aggregate_positions[symbol][side] += 1
                 
-            await asyncio.sleep(0.5) # Rate limit friendly
+                aggregate_positions[symbol][side] += 1
+                
+            await asyncio.sleep(0.1) # Faster polling
             
         # 3. Decide & Execute
         # Logic: If > 50% of top traders are LONG on a coin, we LONG.
