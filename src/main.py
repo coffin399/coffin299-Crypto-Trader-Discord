@@ -9,34 +9,10 @@ from src.config_loader import load_config
 from src.logger import setup_logger
 from src.exchanges.trade_xyz import TradeXYZ
 from src.exchanges.hyperliquid import Hyperliquid
-from src.ai.gemini_service import GeminiService
-from src.notifications.discord_bot import DiscordNotifier
-from src.strategy.coffin299 import Coffin299Strategy
-
-logger = setup_logger("main")
-
-async def main_loop(strategy):
-    logger.info("Starting Main Strategy Loop...")
-    while True:
-        try:
-            await strategy.run_cycle()
-        except Exception as e:
-import asyncio
-import sys
-import os
-
-# Add project root to path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from src.config_loader import load_config
-from src.logger import setup_logger
-from src.exchanges.trade_xyz import TradeXYZ
-from src.exchanges.hyperliquid import Hyperliquid
 from src.exchanges.binance_japan import BinanceJapan
 from src.exchanges.tread_fi import TreadFi
 from src.ai.gemini_service import GeminiService
 from src.notifications.discord_bot import DiscordNotifier
-from src.strategy.coffin299 import Coffin299Strategy
 
 logger = setup_logger("main")
 
@@ -48,8 +24,7 @@ async def main_loop(strategy):
         except Exception as e:
             logger.error(f"Error in strategy cycle: {e}")
         
-        # Sleep for 15 minutes (or less for testing)
-        # For demo purposes, we sleep 60 seconds
+        # Sleep for 60 seconds (loop interval)
         await asyncio.sleep(60) 
 
 async def start_bot():
@@ -57,6 +32,8 @@ async def start_bot():
     
     # Init Exchange
     exchange_name = config.get('active_exchange', 'trade_xyz')
+    logger.info(f"Initializing Exchange: {exchange_name}")
+    
     if exchange_name == 'hyperliquid':
         exchange = Hyperliquid(config)
     elif exchange_name == 'binance_japan':
@@ -67,7 +44,6 @@ async def start_bot():
         exchange = TradeXYZ(config)
         
     # Init AI
-    # Support both single key and list for backward compatibility
     api_keys = config['ai'].get('api_keys') or config['ai'].get('api_key')
     
     ai = GeminiService(
@@ -88,6 +64,8 @@ async def start_bot():
     
     # Init Strategy
     strategy_type = config['strategy'].get('type', 'coffin299')
+    logger.info(f"Initializing Strategy: {strategy_type}")
+    
     if strategy_type == 'copy_leaderboard':
         from src.strategy.coffin299_copy import Coffin299CopyStrategy
         strategy = Coffin299CopyStrategy(config, exchange, ai, discord_notifier)
@@ -97,13 +75,15 @@ async def start_bot():
         strategy = Coffin299Strategy(config, exchange, ai, discord_notifier)
         logger.info("Started in Standard AI Mode")
     
-    # Start WebUI (TODO: Integrate FastAPI here)
-    # For now, we just run the loop
-    
     try:
         await main_loop(strategy)
     except KeyboardInterrupt:
         logger.info("Bot stopped by user.")
 
 if __name__ == "__main__":
-    asyncio.run(start_bot())
+    try:
+        if sys.platform == 'win32':
+            asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+        asyncio.run(start_bot())
+    except KeyboardInterrupt:
+        pass
