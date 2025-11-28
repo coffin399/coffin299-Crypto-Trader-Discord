@@ -51,7 +51,7 @@ class Coffin299CopyStrategy:
                 
                 aggregate_positions[symbol][side] += 1
                 
-            await asyncio.sleep(0.1) # Faster polling
+            await asyncio.sleep(2.0) # Increased delay to avoid 429 Rate Limits
             
         # 3. Decide & Execute
         target_coins = self.config['strategy'].get('copy_trading', {}).get('target_coins', [])
@@ -158,9 +158,9 @@ class Coffin299CopyStrategy:
         amount = usd_value / price
         
         # Rounding (Hyperliquid usually takes 4-5 decimals, let's safe round to 4 significant digits or fixed decimals)
-        # For safety/simplicity, let's use 4 decimals for now. 
+        # For safety/simplicity, let's use 6 decimals for now to support small amounts (e.g. 500 JPY on BTC)
         # Ideally we should check lot size rules from exchange info.
-        amount = round(amount, 4)
+        amount = round(amount, 6)
         
         if amount <= 0:
             logger.warning(f"Calculated amount is too small: {amount} (JPY: {max_quantity_jpy}, Price: {price})")
