@@ -120,8 +120,8 @@ class Hyperliquid(BaseExchange):
                 
                 formatted_positions.append({
                     'symbol': symbol,
-                    'size': size,
-                    'side': 'LONG', # BaseExchange paper logic is spot-like (LONG only)
+                    'size': abs(size),
+                    'side': 'LONG' if size > 0 else 'SHORT',
                     'entry_price': entry_price,
                     'mark_price': current_price,
                     'value': position_value,

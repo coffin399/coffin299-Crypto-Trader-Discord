@@ -1,7 +1,7 @@
 # Coffin299 Crypto Trader
 
 A high-performance, AI-driven crypto trading bot designed for the 2025 bull run.
-Now optimized for **Hyperliquid** with Copy Trading and Real-time WebSocket support.
+Optimized for **Hyperliquid** with Copy Trading and Real-time WebSocket support.
 
 ## 🚀 Key Features
 
@@ -11,6 +11,7 @@ Now optimized for **Hyperliquid** with Copy Trading and Real-time WebSocket supp
 *   **AI Analysis**: Integrates Google Gemini AI for market sentiment analysis (optional).
 *   **Paper Mode**: Risk-free simulation with persistent position tracking (SQLite).
 *   **Discord Notifications**: Get real-time alerts for trades and hourly wallet reports.
+*   **Multi-Exchange Support**: Hyperliquid, Trade.xyz, Tread.fi
 
 ## 🛠 Prerequisites
 
@@ -50,14 +51,20 @@ exchanges:
 
 strategy:
   type: "copy_leaderboard" # Enable Copy Trading
+  max_open_positions: 10
+  
   copy_trading:
     leaderboard_limit: 5      # Copy top 5 traders
+    min_concurrence: 3        # Minimum 3 traders must hold a position to copy it
     target_coins: []          # Empty = Copy all coins they trade
     max_quantity: 500         # Max trade size in JPY per order
-    allow_short: true         # Enable shorting (Recommended)
+    safety_margin_buffer: 0.1 # Keep 10% margin for safety (only close trades when low)
+    allow_short: true         # Enable shorting (Recommended for futures)
   
   paper_mode:
     enabled: true             # Set to false for Real Trading
+    initial_balance:
+      ETH: 0.044              # ~20,000 JPY equivalent (auto-converts to USDC)
 ```
 
 ## 🖥️ Usage
@@ -68,12 +75,65 @@ The bot runs in **Console Mode** and sends all updates to your configured Discor
 ### Commands
 *   `Ctrl+C`: Stop the bot safely.
 
+## 📊 Strategy Modes
+
+### 1. Copy Trading (`copy_leaderboard`)
+- Fetches top traders from Hyperliquid leaderboard (7-day performance)
+- Analyzes their open positions in real-time
+- Uses majority voting: if 3+ traders are LONG on ETH, bot goes LONG
+- Automatically manages position sizing based on `max_quantity` (JPY)
+- Supports both LONG and SHORT positions
+
+### 2. AI Strategy (`coffin299`)
+- Uses Google Gemini AI for market analysis
+- Combines AI sentiment with technical indicators (RSI, EMA)
+- Includes ML-based strategy learning (optional)
+- Adaptive trading based on market conditions
+
+## 🔧 Recent Updates (2025-11-28)
+
+### ✅ Bug Fixes
+- 🔴 **CRITICAL**: Fixed Paper Mode SHORT position detection bug
+  - SHORT positions are now correctly identified (was always showing as LONG)
+  - Prevents duplicate SHORT orders
+  
+- 🔴 **CRITICAL**: Improved position duplicate check logic
+  - Changed from value-based to size-based checking
+  - Prevents unintended additional orders due to price fluctuations
+  - Threshold tightened from 90% to 80%
+
+### ✅ Optimizations
+- `min_concurrence` default changed from 1 to 3 (reduces noise trades)
+- Enhanced logging for position skip reasons
+- Removed Binance Japan support (inaccessible from Japan)
+
 ## ⚠️ Risk Warning
 
 *   **Cryptocurrency trading involves significant risk.**
 *   **Copy Trading** does not guarantee profits. Top traders can lose money.
-*   **Paper Mode** is recommended for testing strategies before risking real funds.
+*   **Leverage Trading** can amplify both gains and losses.
+*   **Paper Mode** is strongly recommended for testing strategies before risking real funds.
+*   Always set appropriate `max_quantity` and `max_open_positions` limits.
+*   Use `safety_margin_buffer` to prevent liquidation.
 *   Use this software at your own risk. The developers are not responsible for any financial losses.
+
+## 🐛 Troubleshooting
+
+### Bot crashes on startup
+- Check that `config.yaml` exists and has valid settings
+- Ensure Python 3.11+ is installed
+- Verify Discord bot token and channel IDs
+
+### No trades executing
+- Verify `active_exchange` matches your intended exchange
+- Check that `paper_mode.enabled` is set correctly
+- For Copy Trading: ensure `min_concurrence` isn't too high (try 2-3)
+- Check Discord logs for error messages
+
+### WebSocket connection issues
+- Hyperliquid WebSocket auto-reconnects every 5 seconds on failure
+- Check your internet connection
+- Verify `testnet` setting matches your wallet
 
 ## 📝 License
 

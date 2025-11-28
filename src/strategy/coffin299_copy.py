@@ -186,17 +186,17 @@ class Coffin299CopyStrategy:
         # Check if we already have a position in this direction
         if my_pos:
             current_side = my_pos['side'] # LONG or SHORT
+            current_size = my_pos.get('size', 0)
+            
             # If we are already LONG and want to BUY
             if side == 'BUY' and current_side == 'LONG':
-                current_val = my_pos.get('value', 0)
-                if current_val >= usd_value * 0.9: # 90% threshold
-                    # logger.info(f"Already have LONG position for {pair} (${current_val:.2f}). Skipping.")
+                if current_size >= amount * 0.8: # 80% threshold for size
+                    logger.info(f"Already have LONG position for {pair} (Size: {current_size:.4f} vs Target: {amount:.4f}). Skipping.")
                     return
             # If we are already SHORT and want to SELL
             elif side == 'SELL' and current_side == 'SHORT':
-                current_val = my_pos.get('value', 0)
-                if current_val >= usd_value * 0.9:
-                    # logger.info(f"Already have SHORT position for {pair} (${current_val:.2f}). Skipping.")
+                if current_size >= amount * 0.8:
+                    logger.info(f"Already have SHORT position for {pair} (Size: {current_size:.4f} vs Target: {amount:.4f}). Skipping.")
                     return
 
         # 2. Convert USD to Token Amount
