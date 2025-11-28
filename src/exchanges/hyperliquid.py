@@ -116,7 +116,7 @@ class Hyperliquid(BaseExchange):
 
                 entry_price = pos['entry_price']
                 pnl = (current_price - entry_price) * size # Simple spot PnL
-                position_value = size * current_price
+                position_value = abs(size) * current_price
                 
                 formatted_positions.append({
                     'symbol': symbol,
