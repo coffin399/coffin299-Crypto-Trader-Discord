@@ -1,3 +1,25 @@
+import asyncio
+import aiohttp
+from datetime import datetime, timedelta
+from ..logger import setup_logger
+
+logger = setup_logger("strategy_copy")
+
+class Coffin299CopyStrategy:
+    def __init__(self, config, exchange, ai, notifier):
+        self.config = config
+        self.exchange = exchange
+        self.ai = ai
+        self.notifier = notifier
+        
+        self.top_traders = []
+        self.last_leaderboard_update = datetime.min
+        self.jpy_rate = 150.0 # Default fallback
+
+        # Start background tasks
+        asyncio.create_task(self.update_jpy_rate_loop())
+        asyncio.create_task(self.periodic_report_loop())
+
     async def run_cycle(self):
         """
         Main copy strategy cycle.
@@ -11,7 +33,7 @@
             return
 
         # 2. Analyze Top Traders' Positions
-        logger.info(f"Analyzing positions of {len(self.top_traders)} top traders: {self.top_traders}")
+        # logger.info(f"Analyzing positions of {len(self.top_traders)} top traders: {self.top_traders}")
         
         aggregate_positions = {} # { 'ETH': {'LONG': 0, 'SHORT': 0} }
         
@@ -26,17 +48,13 @@
                 
                 aggregate_positions[symbol][side] += 1
                 
-                aggregate_positions[symbol][side] += 1
-                
             await asyncio.sleep(0.1) # Faster polling
             
         # 3. Decide & Execute
-        # Logic: If > 50% of top traders are LONG on a coin, we LONG.
-        
         target_coins = self.config['strategy'].get('copy_trading', {}).get('target_coins', [])
         min_concurrence = self.config['strategy'].get('copy_trading', {}).get('min_concurrence', 1)
         
-        logger.info(f"Aggregated Positions: {aggregate_positions}")
+        # logger.info(f"Aggregated Positions: {aggregate_positions}")
         
         for symbol, counts in aggregate_positions.items():
             # Filter by target coins if specified
@@ -83,7 +101,6 @@
         
         if safety_buffer_pct > 0:
             balance = await self.exchange.get_balance()
-            # Hyperliquid balance structure: {'total': {'USDC': ...}, 'free': {'USDC': ...}}
             total_equity = float(balance.get('total', {}).get('USDC', 0))
             free_margin = float(balance.get('free', {}).get('USDC', 0))
             
@@ -92,32 +109,12 @@
             is_low_balance = free_margin < safety_threshold
             
             if is_low_balance:
-                # Only allow trades that REDUCE risk (Close positions)
-                # We need to know if we have a position in this symbol
                 current_positions = await self.exchange.get_positions()
-                # Find position for this symbol
                 my_pos = next((p for p in current_positions if p['symbol'] == symbol), None)
                 
                 if not my_pos:
-                    # No position, so this would be an OPEN trade. REJECT.
                     logger.warning(f"Low Balance ({free_margin:.2f} < {safety_threshold:.2f}). Skipping OPEN trade for {pair}.")
                     return
-                
-                # If we have a position, check if this trade closes it.
-                # LONG signal -> Closes SHORT
-                # SHORT signal -> Closes LONG
-                
-                is_closing = (side == 'LONG' and my_pos['side'] == 'SHORT') or \
-                             (side == 'SELL' and my_pos['side'] == 'LONG') # side is BUY/SELL in execute_copy_trade call?
-                             
-                # Wait, execute_copy_trade receives 'BUY' or 'SELL' (from run_cycle)
-                # run_cycle logic:
-                # if longs > shorts: BUY
-                # if shorts > longs: SELL
-                
-                # So:
-                # BUY -> Long (Open Long or Close Short)
-                # SELL -> Short (Open Short or Close Long)
                 
                 is_closing = (side == 'BUY' and my_pos['side'] == 'SHORT') or \
                              (side == 'SELL' and my_pos['side'] == 'LONG')
@@ -128,27 +125,32 @@
                 else:
                     logger.info(f"Low Balance. Allowing CLOSING trade for {pair}.")
 
+        # 2. Max Open Positions Check
+        max_positions = self.config['strategy'].get('max_open_positions', 0)
+        if max_positions > 0:
+            current_positions = await self.exchange.get_positions()
+            # Check if we already have a position in this symbol
+            my_pos = next((p for p in current_positions if p['symbol'] == symbol), None)
+            
+            # If we don't have a position, this is a new OPEN trade
+            if not my_pos:
+                if len(current_positions) >= max_positions:
+                    logger.warning(f"Max Open Positions Reached ({len(current_positions)}/{max_positions}). Skipping OPEN trade for {pair}.")
+                    return
+
         price = await self.exchange.get_market_price(pair)
         
-        # Mock execution for now (or call real execute if safe)
-        # To be safe, we just log/notify in this first version
         logger.info(f"EXECUTING COPY TRADE: {side} {pair} @ {price} ({reason})")
         
-        # Real execution
-        # side is BUY/SELL. create_order expects 'buy'/'sell' (lowercase usually, but let's check BaseExchange)
-        # BaseExchange checks 'buy'/'sell'.
-        
         order_side = side.lower()
-        amount = 0.01 # Fixed small amount for testing/safety. TODO: Calculate based on balance/risk.
+        amount = 0.01 # Fixed small amount
         
-        # For paper mode, we want to see positions.
         try:
             order = await self.exchange.create_order(pair, 'market', order_side, amount)
             if order:
                 logger.info(f"Trade Executed: {order}")
                 
                 # Calculate JPY Value
-                # Value = amount * price * self.jpy_rate
                 total_jpy = amount * price * self.jpy_rate
                 
                 await self.notifier.notify_trade(side, pair, price, str(amount), reason, total_jpy=total_jpy)
@@ -156,3 +158,54 @@
                 logger.error("Trade Execution Failed")
         except Exception as e:
             logger.error(f"Trade Execution Error: {e}")
+
+    async def update_jpy_rate_loop(self):
+        logger.info("Starting JPY Rate Polling Task...")
+        url = "https://api.exchangerate-api.com/v4/latest/USD"
+        
+        while True:
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(url) as resp:
+                        if resp.status == 200:
+                            data = await resp.json()
+                            rate = data.get('rates', {}).get('JPY')
+                            if rate:
+                                self.jpy_rate = float(rate)
+                                logger.info(f"Updated USD/JPY Rate: {self.jpy_rate}")
+                            else:
+                                logger.warning("JPY rate not found in API response")
+                        else:
+                            logger.warning(f"Failed to fetch exchange rate: {resp.status}")
+            except Exception as e:
+                logger.error(f"Error fetching exchange rate: {e}")
+                
+            await asyncio.sleep(3600) # 1 hour
+
+    async def periodic_report_loop(self):
+        logger.info("Starting Periodic Report Task (Every 30 mins)...")
+        
+        # Initial Report
+        await asyncio.sleep(5) # Wait a bit for startup
+        await self.send_report()
+        
+        while True:
+            # Wait 30 minutes
+            await asyncio.sleep(1800)
+            await self.send_report()
+
+    async def send_report(self):
+        try:
+            balance = await self.exchange.get_balance()
+            total_usd = float(balance.get('total', {}).get('USDC', 0))
+            total_jpy = total_usd * self.jpy_rate
+            
+            positions = await self.exchange.get_positions()
+            pos_summary = {}
+            for p in positions:
+                pos_summary[p['symbol']] = f"{p['size']} ({p['pnl']:.2f} USD)"
+            
+            await self.notifier.notify_balance(total_jpy, currency="JPY", changes=pos_summary)
+            logger.info(f"Sent Periodic Report. Total: ${total_usd:.2f} (¥{total_jpy:.0f})")
+        except Exception as e:
+            logger.error(f"Error in periodic report: {e}")
