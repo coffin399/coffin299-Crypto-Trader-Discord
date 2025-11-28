@@ -37,6 +37,85 @@ class Coffin299CopyStrategy:
             logger.warning("No top traders found to copy. Waiting...")
             return
 
+        # Check copy mode
+        copy_mode = self.config['strategy'].get('copy_trading', {}).get('copy_mode', 'aggregate')
+        
+        if copy_mode == 'mirror':
+            await self.run_mirror_mode()
+        else:
+            await self.run_aggregate_mode()
+    
+    async def run_mirror_mode(self):
+        """
+        Mirror Mode: Copy ALL positions from a specific trader
+        """
+        logger.info("Running in MIRROR mode...")
+        
+        # Check if specific address is configured
+        mirror_address = self.config['strategy'].get('copy_trading', {}).get('mirror_target_address', '')
+        
+        # Filter out placeholder addresses
+        if mirror_address and mirror_address.startswith('0x') and len(mirror_address) > 10:
+            target_trader = mirror_address
+            logger.info(f"Using configured mirror address: {target_trader}")
+        else:
+            # Fallback to first trader from leaderboard
+            if not self.top_traders:
+                logger.warning("No traders available to mirror. Skipping.")
+                return
+            target_trader = self.top_traders[0]
+            logger.info(f"Using leaderboard #1: {target_trader}")
+        
+        # Get target trader's positions
+        target_positions = await self.exchange.get_user_positions(target_trader)
+        
+        # Get our current positions
+        my_positions = await self.exchange.get_positions()
+        my_positions_dict = {p['symbol']: p for p in my_positions}
+        
+        # Fetch all prices once
+        all_prices = {}
+        if hasattr(self.exchange, 'get_all_prices'):
+            all_prices = await self.exchange.get_all_prices()
+        
+        # Track symbols we should have positions in
+        target_symbols = set()
+        
+        # Copy each position from target trader
+        for pos in target_positions:
+            symbol = pos['symbol']
+            side = pos['side']  # LONG or SHORT
+            target_symbols.add(symbol)
+            
+            # Filter by target coins if specified
+            target_coins = self.config['strategy'].get('copy_trading', {}).get('target_coins', [])
+            if target_coins and symbol not in target_coins:
+                continue
+            
+            current_price = all_prices.get(symbol)
+            
+            # Execute trade to match this position
+            action = "BUY" if side == "LONG" else "SELL"
+            await self.execute_copy_trade(symbol, action, f"Mirroring {target_trader[:8]}...", price=current_price)
+            
+            await asyncio.sleep(0.1)
+        
+        # Close positions we have but target trader doesn't
+        for symbol, my_pos in my_positions_dict.items():
+            if symbol not in target_symbols:
+                logger.info(f"Target trader closed {symbol}, closing our position...")
+                # Close by trading opposite direction
+                close_action = "SELL" if my_pos['side'] == 'LONG' else "BUY"
+                current_price = all_prices.get(symbol)
+                await self.execute_copy_trade(symbol, close_action, f"Closing {symbol} (not in target)", price=current_price)
+                await asyncio.sleep(0.1)
+    
+    async def run_aggregate_mode(self):
+        """
+        Aggregate Mode: Use majority voting from multiple traders
+        """
+        logger.info("Running in AGGREGATE mode...")
+        
         # 2. Analyze Top Traders' Positions
         aggregate_positions = {} # { 'ETH': {'LONG': 0, 'SHORT': 0} }
         
@@ -183,7 +262,18 @@ class Coffin299CopyStrategy:
         # 1. Convert JPY to USD
         usd_value = max_quantity_jpy / self.jpy_rate
         
-        # Check if we already have a position in this direction
+        # 2. Convert USD to Token Amount (BEFORE checking duplicates)
+        # Amount = USD / Price
+        amount = usd_value / price
+        
+        # Rounding
+        amount = round(amount, 6)
+        
+        if amount <= 0:
+            logger.warning(f"Calculated amount is too small: {amount} (JPY: {max_quantity_jpy}, Price: {price})")
+            return
+        
+        # 3. Check if we already have a position in this direction
         if my_pos:
             current_side = my_pos['side'] # LONG or SHORT
             current_size = my_pos.get('size', 0)
@@ -198,17 +288,6 @@ class Coffin299CopyStrategy:
                 if current_size >= amount * 0.8:
                     logger.info(f"Already have SHORT position for {pair} (Size: {current_size:.4f} vs Target: {amount:.4f}). Skipping.")
                     return
-
-        # 2. Convert USD to Token Amount
-        # Amount = USD / Price
-        amount = usd_value / price
-        
-        # Rounding
-        amount = round(amount, 6)
-        
-        if amount <= 0:
-            logger.warning(f"Calculated amount is too small: {amount} (JPY: {max_quantity_jpy}, Price: {price})")
-            return
         
         try:
             order = await self.exchange.create_order(pair, 'market', order_side, amount)

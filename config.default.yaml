@@ -27,7 +27,7 @@ exchanges:
     # Trade.xyz uses Hyperliquid API
     wallet_address: "YOUR_WALLET_ADDRESS"
     private_key: "YOUR_PRIVATE_KEY"
-    testnet: false
+    testnet: true
 
   hyperliquid:
     wallet_address: "YOUR_WALLET_ADDRESS"
@@ -51,12 +51,14 @@ strategy:
   
   # Copy Trading Settings
   copy_trading:
+    copy_mode: "mirror"       # "aggregate" = 多数決コピー, "mirror" = 特定トレーダー完全コピー
     leaderboard_limit: 5
+    mirror_target_address: "0x..."  # Mirrorモード時: コピー対象ウォレットアドレス (空ならleaderboard 1位を使用)
     fallback_addresses: 
       - "0x..." # Add addresses here if API fails
       - "0x..."
     target_coins: [] # Coins to copy. If empty, copy all.
-    min_concurrence: 1 # Minimum number of traders holding a position to copy it
+    min_concurrence: 1 # Aggregateモード: 最低何人のトレーダーが保有で判断 
     safety_margin_buffer: 0.1 # If free margin < 10% of total, only allow closing trades
     max_quantity: 500 #JPY
     allow_short: true # If false, only allow SELL to close existing LONG positions (no new SHORTs)
