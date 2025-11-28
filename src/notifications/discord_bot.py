@@ -123,3 +123,18 @@ class DiscordNotifier:
             color=0x3498db,
             fields=fields
         )
+    async def notify_learning_status(self, message, pair, accuracy=None):
+        """
+        Sends AI learning status updates to the 'ai_learning' channel.
+        """
+        fields = [{"name": "Target Pair", "value": pair, "inline": True}]
+        if accuracy:
+            fields.append({"name": "Model Accuracy", "value": f"{accuracy:.2%}", "inline": True})
+            
+        await self.send_embed(
+            channel_key='ai_learning',
+            title="🧠 AI Learning Update",
+            description=message,
+            color=0x9b59b6, # Purple
+            fields=fields
+        )

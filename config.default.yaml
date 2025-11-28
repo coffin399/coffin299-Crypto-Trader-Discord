@@ -110,6 +110,7 @@ discord:
   channels:
     trade_alerts: 123456789012345678  # Channel ID for Buy/Sell
     wallet_updates: 123456789012345678 # Channel ID for Balance
+    ai_learning: 123456789012345678 # Channel ID for AI Learning Status
   
   notifications:
     trade_execution: true  # Buy/Sell alerts

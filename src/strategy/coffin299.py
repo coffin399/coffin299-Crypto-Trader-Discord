@@ -155,7 +155,12 @@ class Coffin299Strategy:
         
         if success:
             logger.info("Model training completed successfully.")
-            await self.notifier.notify_message(f"🧠 AI Model Trained on 1 year of {pair} data. Ready to trade.")
+            # await self.notifier.notify_message(f"🧠 AI Model Trained on 1 year of {pair} data. Ready to trade.")
+            # Use specific channel
+            await self.notifier.notify_learning_status(
+                f"Training completed on 1 year of historical data ({self.timeframe}).\nReady to trade.",
+                pair
+            )
         else:
             logger.error("Model training failed.")
 
