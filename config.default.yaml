@@ -54,7 +54,7 @@ strategy:
   timeframe: "15m"
   leverage: 1  # Leverage multiplier default:5
   max_open_positions: 10
-  loop_interval_seconds: 3 # Main loop wait time (default 60s)
+  loop_interval_seconds: 1 # Main loop wait time (default 60s)
   
   # Copy Trading Settings
   copy_trading:

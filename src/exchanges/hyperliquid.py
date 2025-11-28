@@ -116,12 +116,15 @@ class Hyperliquid(BaseExchange):
 
                 entry_price = pos['entry_price']
                 pnl = (current_price - entry_price) * size # Simple spot PnL
+                position_value = size * current_price
                 
                 formatted_positions.append({
                     'symbol': symbol,
                     'size': size,
                     'side': 'LONG', # BaseExchange paper logic is spot-like (LONG only)
                     'entry_price': entry_price,
+                    'mark_price': current_price,
+                    'value': position_value,
                     'pnl': pnl
                 })
             return formatted_positions
@@ -140,17 +143,22 @@ class Hyperliquid(BaseExchange):
                 symbol = pos.get('coin', 'Unknown')
                 
                 # Calculate PnL (Unrealized)
-                # We need current price. 
-                # For efficiency, we might skip exact PnL or fetch it.
-                # Hyperliquid user_state might have it? 
-                # 'unrealizedPnl' is in position?
                 pnl = float(pos.get('unrealizedPnl', 0))
+                
+                # Try to get mark price from cache for value calc
+                mark_price = 0
+                if hasattr(self, 'price_cache'):
+                    mark_price = self.price_cache.get(symbol, 0)
+                
+                position_value = abs(size) * mark_price
                 
                 positions.append({
                     'symbol': symbol,
                     'size': abs(size),
                     'side': 'LONG' if size > 0 else 'SHORT',
                     'entry_price': entry_price,
+                    'mark_price': mark_price,
+                    'value': position_value,
                     'pnl': pnl
                 })
             return positions

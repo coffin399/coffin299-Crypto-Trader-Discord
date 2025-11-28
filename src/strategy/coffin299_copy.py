@@ -253,7 +253,11 @@ class Coffin299CopyStrategy:
             positions = await self.exchange.get_positions()
             pos_summary = {}
             for p in positions:
-                pos_summary[p['symbol']] = f"{p['size']} ({p['pnl']:.2f} USD)"
+                # Show Value if available, otherwise PnL
+                val = p.get('value', 0)
+                pnl = p.get('pnl', 0)
+                # Format: Size ($Value)
+                pos_summary[p['symbol']] = f"{p['size']} (${val:.2f})"
             
             await self.notifier.notify_balance(total_jpy, currency="JPY", changes=pos_summary)
             logger.info(f"Sent Periodic Report. Total: ${total_usd:.2f} (¥{total_jpy:.0f})")
