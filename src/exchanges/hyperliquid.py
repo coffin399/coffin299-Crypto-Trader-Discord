@@ -36,6 +36,23 @@ class Hyperliquid(BaseExchange):
 
     async def get_balance(self):
         if self.paper_mode:
+            # Auto-convert ETH to USDC for paper trading if USDC is low/zero but ETH exists
+            # This simulates "using ETH as collateral" or "selling ETH for USDC"
+            eth_bal = self.paper_balance.get('ETH', 0)
+            usdc_bal = self.paper_balance.get('USDC', 0)
+            
+            if eth_bal > 0 and usdc_bal < 100: # Threshold
+                price = 3000 # Mock price or fetch
+                try:
+                    price = await self.get_market_price("ETH/USDC") or 3000
+                except:
+                    pass
+                    
+                conv_val = eth_bal * price
+                self.paper_balance['ETH'] = 0
+                self.paper_balance['USDC'] = usdc_bal + conv_val
+                logger.info(f"Paper Mode: Converted {eth_bal} ETH to {conv_val:.2f} USDC for trading.")
+                
             return self.paper_balance
         
         try:

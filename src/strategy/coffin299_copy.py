@@ -31,7 +31,7 @@ class Coffin299CopyStrategy:
             return
 
         # 2. Analyze Top Traders' Positions
-        logger.info(f"Analyzing positions of {len(self.top_traders)} top traders...")
+        logger.info(f"Analyzing positions of {len(self.top_traders)} top traders: {self.top_traders}")
         
         aggregate_positions = {} # { 'ETH': {'LONG': 0, 'SHORT': 0} }
         

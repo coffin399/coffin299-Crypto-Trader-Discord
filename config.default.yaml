@@ -61,7 +61,7 @@ strategy:
     fallback_addresses: 
       - "0x..." # Add addresses here if API fails
       - "0x..."
-    target_coins: ["ETH", "BTC", "SOL", "SUI"] # Coins to copy. If empty, copy all.
+    target_coins: [] # Coins to copy. If empty, copy all.
     min_concurrence: 1 # Minimum number of traders holding a position to copy it
     safety_margin_buffer: 0.1 # If free margin < 10% of total, only allow closing trades
 
