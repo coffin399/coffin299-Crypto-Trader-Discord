@@ -36,8 +36,6 @@ class Coffin299CopyStrategy:
             return
 
         # 2. Analyze Top Traders' Positions
-        # logger.info(f"Analyzing positions of {len(self.top_traders)} top traders: {self.top_traders}")
-        
         aggregate_positions = {} # { 'ETH': {'LONG': 0, 'SHORT': 0} }
         
         for address in self.top_traders:
@@ -51,6 +49,97 @@ class Coffin299CopyStrategy:
                 
                 aggregate_positions[symbol][side] += 1
                 
+            await asyncio.sleep(2.0) # Delay to avoid rate limits
+            
+        # 3. Decide & Execute
+        target_coins = self.config['strategy'].get('copy_trading', {}).get('target_coins', [])
+        min_concurrence = self.config['strategy'].get('copy_trading', {}).get('min_concurrence', 1)
+        
+        # Fetch all prices once to avoid rate limits
+        all_prices = {}
+        if hasattr(self.exchange, 'get_all_prices'):
+            all_prices = await self.exchange.get_all_prices()
+        
+        for symbol, counts in aggregate_positions.items():
+            # Filter by target coins if specified
+            if target_coins and symbol not in target_coins:
+                continue
+                
+            longs = counts['LONG']
+            shorts = counts['SHORT']
+            total = longs + shorts
+            
+            if total >= min_concurrence: 
+                logger.info(f"Copy Signal for {symbol}: {longs} LONG vs {shorts} SHORT (Total: {total})")
+                
+                # Get price from cache or fetch if missing
+                current_price = all_prices.get(symbol)
+                
+                # Simple Majority Vote
+                if longs > shorts:
+                    # BUY
+                    await self.execute_copy_trade(symbol, "BUY", f"Copying {longs}/{total} top traders", price=current_price)
+                elif shorts > longs:
+                    # SELL
+                    await self.execute_copy_trade(symbol, "SELL", f"Copying {shorts}/{total} top traders", price=current_price)
+            
+            # Sleep slightly even with bulk fetch to be safe
+            await asyncio.sleep(0.1)
+
+    async def update_leaderboard(self):
+        logger.info("Updating Leaderboard...")
+        
+        # Try API
+        if hasattr(self.exchange, 'get_leaderboard_top_traders'):
+            self.top_traders = await self.exchange.get_leaderboard_top_traders(limit=self.config['strategy'].get('copy_trading', {}).get('leaderboard_limit', 5))
+            
+        # Fallback if empty
+        if not self.top_traders:
+            logger.warning("API Leaderboard fetch failed or empty. Using fallback addresses from config.")
+            fallback = self.config['strategy'].get('copy_trading', {}).get('fallback_addresses', [])
+            # Filter out placeholders
+            self.top_traders = [addr for addr in fallback if addr and "0x..." not in addr]
+            
+        logger.info(f"Top Traders to Copy: {self.top_traders}")
+        self.last_leaderboard_update = datetime.utcnow()
+
+    async def execute_copy_trade(self, symbol, side, reason, price=None):
+        pair = f"{symbol}/USDC"
+        
+        # 1. Safety Margin Check
+        safety_buffer_pct = self.config['strategy'].get('copy_trading', {}).get('safety_margin_buffer', 0.0)
+        
+        if safety_buffer_pct > 0:
+            balance = await self.exchange.get_balance()
+            total_equity = float(balance.get('total', {}).get('USDC', 0))
+            free_margin = float(balance.get('free', {}).get('USDC', 0))
+            
+            safety_threshold = total_equity * safety_buffer_pct
+            
+            is_low_balance = free_margin < safety_threshold
+            
+            if is_low_balance:
+                current_positions = await self.exchange.get_positions()
+                my_pos = next((p for p in current_positions if p['symbol'] == symbol), None)
+                
+                if not my_pos:
+                    logger.warning(f"Low Balance ({free_margin:.2f} < {safety_threshold:.2f}). Skipping OPEN trade for {pair}.")
+                    return
+                
+                is_closing = (side == 'BUY' and my_pos['side'] == 'SHORT') or \
+                             (side == 'SELL' and my_pos['side'] == 'LONG')
+
+                if not is_closing:
+                    logger.warning(f"Low Balance. Skipping trade that increases risk for {pair}.")
+                    return
+                else:
+                    logger.info(f"Low Balance. Allowing CLOSING trade for {pair}.")
+
+        # 2. Max Open Positions Check
+        max_positions = self.config['strategy'].get('max_open_positions', 0)
+        allow_short = self.config['strategy'].get('copy_trading', {}).get('allow_short', True)
+
+        current_positions = await self.exchange.get_positions()
         my_pos = next((p for p in current_positions if p['symbol'] == symbol), None)
 
         # Logic for SELL (Shorting vs Closing)
@@ -72,7 +161,8 @@ class Coffin299CopyStrategy:
                     logger.warning(f"Max Open Positions Reached ({len(current_positions)}/{max_positions}). Skipping OPEN trade for {pair}.")
                     return
 
-        price = await self.exchange.get_market_price(pair)
+        if not price:
+            price = await self.exchange.get_market_price(pair)
         
         logger.info(f"EXECUTING COPY TRADE: {side} {pair} @ {price} ({reason})")
         
