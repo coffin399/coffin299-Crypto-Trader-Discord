@@ -12,57 +12,165 @@ class DiscordNotifier:
         self.channels = config['discord'].get('channels', {})
         
         self.client = None
-        if self.enabled and self.token:
-            intents = discord.Intents.default()
-            self.client = discord.Client(intents=intents)
-            
-            @self.client.event
-            async def on_ready():
-                logger.info(f"Discord Bot logged in as {self.client.user}")
-        
         self.notification_buffer = []
+        self._connection_task = None
+        self._flush_task = None
+        self._health_check_task = None
+        self._is_shutting_down = False
+        self._last_successful_send = None
+        self._reconnect_attempts = 0
+        self._max_reconnect_attempts = 5
+        
+        if self.enabled and self.token:
+            self._initialize_client()
+    
+    def _initialize_client(self):
+        """Initialize Discord client with event handlers."""
+        intents = discord.Intents.default()
+        self.client = discord.Client(intents=intents)
+        
+        @self.client.event
+        async def on_ready():
+            logger.info(f"🟢 Discord Bot logged in as {self.client.user}")
+            self._reconnect_attempts = 0
+            self._last_successful_send = datetime.utcnow()
+        
+        @self.client.event
+        async def on_disconnect():
+            if not self._is_shutting_down:
+                logger.warning("🟡 Discord Bot disconnected")
+        
+        @self.client.event
+        async def on_resumed():
+            logger.info("🟢 Discord Bot connection resumed")
+            self._reconnect_attempts = 0
 
     async def start(self):
         """
-        Starts the Discord client in the background.
+        Starts the Discord client in the background with monitoring.
         """
         if self.client and self.token:
             try:
                 # Start the client without blocking
-                asyncio.create_task(self.client.start(self.token))
+                self._connection_task = asyncio.create_task(self._managed_client_start())
                 # Start buffer flush loop
-                asyncio.create_task(self._flush_buffer_loop())
+                self._flush_task = asyncio.create_task(self._flush_buffer_loop())
+                # Start health check
+                self._health_check_task = asyncio.create_task(self._health_check_loop())
+                logger.info("🔵 Discord Bot started with monitoring")
             except Exception as e:
-                logger.error(f"Failed to start Discord bot: {e}")
+                logger.error(f"🔴 Failed to start Discord bot: {e}")
+
+    async def _managed_client_start(self):
+        """Managed start with automatic reconnection."""
+        while not self._is_shutting_down:
+            try:
+                logger.info("🔵 Starting Discord client connection...")
+                await self.client.start(self.token)
+            except discord.errors.LoginFailure as e:
+                logger.error(f"🔴 Discord login failed (invalid token): {e}")
+                break
+            except Exception as e:
+                self._reconnect_attempts += 1
+                if self._reconnect_attempts >= self._max_reconnect_attempts:
+                    logger.error(f"🔴 Max reconnection attempts ({self._max_reconnect_attempts}) reached. Stopping.")
+                    break
+                
+                wait_time = min(60, 5 * self._reconnect_attempts)
+                logger.error(f"🟡 Discord client error (attempt {self._reconnect_attempts}/{self._max_reconnect_attempts}): {e}")
+                logger.info(f"🔵 Reconnecting in {wait_time} seconds...")
+                await asyncio.sleep(wait_time)
+                
+                # Reinitialize client for clean reconnection
+                if not self.client.is_closed():
+                    await self.client.close()
+                self._initialize_client()
+
+    async def _health_check_loop(self):
+        """Periodic health check to detect silent failures."""
+        while not self._is_shutting_down:
+            await asyncio.sleep(60)  # Check every 60 seconds
+            
+            try:
+                if self.client and self.client.is_ready():
+                    # Check if we haven't sent anything for too long
+                    if self._last_successful_send:
+                        time_since_last_send = datetime.utcnow() - self._last_successful_send
+                        if time_since_last_send > timedelta(minutes=30):
+                            logger.warning(f"🟡 No successful sends in {time_since_last_send.total_seconds()/60:.1f} minutes")
+                    
+                    # Verify we can still fetch a channel
+                    test_channel_key = list(self.channels.keys())[0] if self.channels else None
+                    if test_channel_key:
+                        channel = await self._get_channel(test_channel_key)
+                        if channel:
+                            logger.debug(f"🟢 Health check passed - channel {test_channel_key} accessible")
+                        else:
+                            logger.warning(f"🟡 Health check warning - cannot access channel {test_channel_key}")
+                else:
+                    logger.warning(f"🟡 Health check failed - client not ready (is_closed: {self.client.is_closed() if self.client else 'N/A'})")
+            except Exception as e:
+                logger.error(f"🔴 Health check error: {e}")
 
     async def _flush_buffer_loop(self):
-        while True:
-            await asyncio.sleep(3) # Wait 3 seconds
-            if self.notification_buffer:
-                # Flush buffer
-                to_send = self.notification_buffer[:]
-                self.notification_buffer = []
-                
-                channel_key = 'trade_alerts'
-                channel = await self._get_channel(channel_key)
-                
-                if channel:
-                    # Chunk into groups of 10 (Discord limit per message)
-                    for i in range(0, len(to_send), 10):
-                        chunk = to_send[i:i+10]
-                        try:
-                            await channel.send(embeds=chunk)
-                        except Exception as e:
-                            logger.error(f"Failed to send buffered embeds: {e}")
+        """Flush notification buffer with error recovery."""
+        while not self._is_shutting_down:
+            try:
+                await asyncio.sleep(3)
+                if self.notification_buffer:
+                    # Flush buffer
+                    to_send = self.notification_buffer[:]
+                    self.notification_buffer = []
+                    
+                    channel_key = 'trade_alerts'
+                    channel = await self._get_channel(channel_key)
+                    
+                    if channel:
+                        # Chunk into groups of 10 (Discord limit per message)
+                        for i in range(0, len(to_send), 10):
+                            chunk = to_send[i:i+10]
+                            try:
+                                await channel.send(embeds=chunk)
+                                self._last_successful_send = datetime.utcnow()
+                            except Exception as e:
+                                logger.error(f"🔴 Failed to send buffered embeds: {e}")
+                                # Re-add failed chunks to buffer
+                                self.notification_buffer.extend(chunk)
+                    else:
+                        # Channel not available, put messages back
+                        logger.warning(f"🟡 Channel not available, re-buffering {len(to_send)} notifications")
+                        self.notification_buffer = to_send + self.notification_buffer
+            except Exception as e:
+                logger.error(f"🔴 Error in flush buffer loop: {e}")
+                await asyncio.sleep(5)  # Wait before retrying
+
+    async def shutdown(self):
+        """Gracefully shutdown the Discord bot."""
+        logger.info("🔵 Shutting down Discord bot...")
+        self._is_shutting_down = True
+        
+        # Cancel background tasks
+        for task in [self._health_check_task, self._flush_task]:
+            if task and not task.done():
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+        
+        # Close client
+        if self.client and not self.client.is_closed():
+            await self.client.close()
+        
+        logger.info("🟢 Discord bot shutdown complete")
 
     async def _get_channel(self, channel_key):
         if not self.client or not self.client.is_ready():
-            # logger.warning("Discord client not ready.") 
             return None
             
         channel_id = self.channels.get(channel_key)
         if not channel_id:
-            logger.error(f"Channel ID for '{channel_key}' not configured.")
+            logger.error(f"🔴 Channel ID for '{channel_key}' not configured.")
             return None
             
         try:
@@ -70,8 +178,14 @@ class DiscordNotifier:
             if not channel:
                 channel = await self.client.fetch_channel(int(channel_id))
             return channel
+        except discord.errors.NotFound:
+            logger.error(f"🔴 Channel {channel_id} not found - check permissions")
+            return None
+        except discord.errors.Forbidden:
+            logger.error(f"🔴 No permission to access channel {channel_id}")
+            return None
         except Exception as e:
-            logger.error(f"Error fetching channel {channel_id}: {e}")
+            logger.error(f"🔴 Error fetching channel {channel_id}: {e}")
             return None
 
     async def send_message(self, channel_key, content):
@@ -79,13 +193,19 @@ class DiscordNotifier:
         
         channel = await self._get_channel(channel_key)
         if channel:
-            await channel.send(content)
+            try:
+                await channel.send(content)
+                self._last_successful_send = datetime.utcnow()
+            except Exception as e:
+                logger.error(f"🔴 Failed to send message: {e}")
 
     async def send_embed(self, channel_key, title, description, color=0x00ff00, fields=None):
         if not self.enabled: return
         
         channel = await self._get_channel(channel_key)
-        if not channel: return
+        if not channel: 
+            logger.warning(f"🟡 Cannot send embed - channel '{channel_key}' not available")
+            return
 
         # Use JST for display
         jst = datetime.utcnow() + timedelta(hours=9)
@@ -104,8 +224,11 @@ class DiscordNotifier:
 
         try:
             await channel.send(embed=embed)
+            self._last_successful_send = datetime.utcnow()
+        except discord.errors.HTTPException as e:
+            logger.error(f"🔴 Discord HTTP error sending embed: {e.status} - {e.text}")
         except Exception as e:
-            logger.error(f"Failed to send embed: {e}")
+            logger.error(f"🔴 Failed to send embed: {e}")
 
     async def notify_trade(self, action, pair, price, quantity, reason, pnl=None, currency="JPY", total_jpy=None):
         """
