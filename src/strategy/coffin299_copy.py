@@ -146,14 +146,32 @@ class Coffin299CopyStrategy:
         logger.info(f"EXECUTING COPY TRADE: {side} {pair} @ {price} ({reason})")
         
         order_side = side.lower()
-        amount = 0.01 # Fixed small amount
+        
+        # Calculate Amount based on max_quantity (JPY)
+        max_quantity_jpy = self.config['strategy'].get('copy_trading', {}).get('max_quantity', 1500) # Default 1500 JPY (~$10)
+        
+        # 1. Convert JPY to USD
+        usd_value = max_quantity_jpy / self.jpy_rate
+        
+        # 2. Convert USD to Token Amount
+        # Amount = USD / Price
+        amount = usd_value / price
+        
+        # Rounding (Hyperliquid usually takes 4-5 decimals, let's safe round to 4 significant digits or fixed decimals)
+        # For safety/simplicity, let's use 4 decimals for now. 
+        # Ideally we should check lot size rules from exchange info.
+        amount = round(amount, 4)
+        
+        if amount <= 0:
+            logger.warning(f"Calculated amount is too small: {amount} (JPY: {max_quantity_jpy}, Price: {price})")
+            return
         
         try:
             order = await self.exchange.create_order(pair, 'market', order_side, amount)
             if order:
                 logger.info(f"Trade Executed: {order}")
                 
-                # Calculate JPY Value
+                # Calculate JPY Value (Actual)
                 total_jpy = amount * price * self.jpy_rate
                 
                 await self.notifier.notify_trade(side, pair, price, str(amount), reason, total_jpy=total_jpy)
