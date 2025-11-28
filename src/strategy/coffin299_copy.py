@@ -12,6 +12,9 @@ class Coffin299CopyStrategy:
         self.ai = ai
         self.notifier = notifier
         
+        self.target_pair = "COPY_TRADING" # Virtual pair name
+        self.current_recommendation = {"action": "COPY", "confidence": 1.0}
+        
         self.top_traders = []
         self.last_leaderboard_update = datetime.min
         self.jpy_rate = 150.0 # Default fallback
