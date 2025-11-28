@@ -9,7 +9,8 @@ logger = setup_logger("ai_learner")
 
 class StrategyLearner:
     def __init__(self):
-        self.model = RandomForestClassifier(n_estimators=100, random_state=42)
+        # n_jobs=-1 uses all available cores (Great for N100's 4 cores)
+        self.model = RandomForestClassifier(n_estimators=100, random_state=42, n_jobs=-1)
         self.is_trained = False
         self.feature_cols = ['rsi', 'sma_diff', 'volatility', 'volume_change']
 
