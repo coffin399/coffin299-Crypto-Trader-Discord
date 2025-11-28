@@ -110,52 +110,38 @@ class Hyperliquid(BaseExchange):
             return 0.0
 
     async def get_ohlcv(self, pair, timeframe, since=None, limit=100):
+        # Use CCXT for standardized data fetching
         try:
-            coin = pair.split('/')[0]
-            # Map timeframe to Hyperliquid format if needed
-            # SDK candles_snapshot(coin, interval, startTime, endTime)
+            import ccxt.async_support as ccxt
             
-            start_time = since if since else 0
-            # If since is provided, we want data FROM that time.
-            # If not, we might want recent data.
+            if not hasattr(self, 'ccxt_client'):
+                self.ccxt_client = ccxt.hyperliquid({
+                    'enableRateLimit': True,
+                    'options': {'defaultType': 'future'}
+                })
+                # If we have keys, we could set them, but for public data it's not needed.
+                # self.ccxt_client.apiKey = ...
             
-            # Hyperliquid 'candles_snapshot' seems to return data between start and end.
-            # We need to ensure we get enough data.
+            # Map timeframe if needed (CCXT standard is usually fine)
             
-            end_time = int(datetime.now().timestamp() * 1000)
+            # Fetch
+            # CCXT handles pagination if we loop, but here we fetch one batch.
+            # The caller (strategy) handles the loop.
             
-            # If we are paginating, 'since' is the start.
-            # We can request a large chunk.
+            ohlcv = await self.ccxt_client.fetch_ohlcv(pair, timeframe, since, limit)
             
-            candles = self.info.candles_snapshot(coin, timeframe, start_time, end_time)
+            # CCXT returns [timestamp, open, high, low, close, volume]
+            return ohlcv
             
-            # Filter/Limit if needed (SDK might return all in range)
-            # If we got too many, we might slice, but usually we want all for training.
-            # But the caller expects 'limit' roughly or just a batch.
-            
-            # Convert to standard OHLCV
-            # [timestamp, open, high, low, close, volume]
-            formatted = []
-            for c in candles:
-                formatted.append([
-                    c['t'],
-                    float(c['o']),
-                    float(c['h']),
-                    float(c['l']),
-                    float(c['c']),
-                    float(c['v'])
-                ])
-            
-            # Sort by time just in case
-            formatted.sort(key=lambda x: x[0])
-            
-            # If limit is strict, we might slice, but for history fetch we usually want max.
-            # The caller 'fetch_historical_data' handles pagination loop.
-            
-            return formatted
         except Exception as e:
-            logger.error(f"Failed to fetch OHLCV: {e}")
+            logger.error(f"CCXT Fetch Failed: {e}")
+            # Fallback to SDK if CCXT fails?
+            # For now, just return empty to trigger retry or error
             return []
+            
+    async def close(self):
+        if hasattr(self, 'ccxt_client'):
+            await self.ccxt_client.close()
 
     async def _execute_real_order(self, pair, type, side, amount, price=None):
         if not self.exchange:
@@ -194,3 +180,64 @@ class Hyperliquid(BaseExchange):
 
     async def close(self):
         pass
+    async def get_leaderboard_top_traders(self, limit=5):
+        """
+        Fetches top traders from Hyperliquid stats API.
+        """
+        import aiohttp
+        url = "https://api.hyperliquid.xyz/info"
+        payload = {"type": "leaderboard", "window": "7d"} # 7d window for active traders
+        
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(url, json=payload) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        # data is list of [address, pnl, ...]
+                        # We want top N addresses
+                        top_traders = []
+                        for row in data[:limit]:
+                            # row structure depends on API. Usually row[0] is address?
+                            # Let's assume row structure based on common knowledge or try to parse dict if it is dict.
+                            # Actually leaderboard rows are often dicts in Hyperliquid API: {'ethAddress': '...', 'accountValue': ...}
+                            if isinstance(row, dict):
+                                address = row.get('ethAddress') or row.get('address')
+                                if address:
+                                    top_traders.append(address)
+                            elif isinstance(row, list):
+                                top_traders.append(row[0]) # Fallback
+                        return top_traders
+                    else:
+                        logger.error(f"Failed to fetch leaderboard: {response.status}")
+                        return []
+        except Exception as e:
+            logger.error(f"Error fetching leaderboard: {e}")
+            return []
+
+    async def get_user_positions(self, address):
+        """
+        Fetches open positions for a specific user address.
+        """
+        try:
+            # Use SDK info.user_state(address)
+            user_state = self.info.user_state(address)
+            raw_positions = user_state.get('assetPositions', [])
+            
+            positions = []
+            for p in raw_positions:
+                pos = p.get('position', {})
+                size = float(pos.get('szi', 0))
+                if size == 0: continue
+                
+                symbol = pos.get('coin', 'Unknown')
+                side = 'LONG' if size > 0 else 'SHORT'
+                
+                positions.append({
+                    'symbol': symbol,
+                    'side': side,
+                    'size': abs(size)
+                })
+            return positions
+        except Exception as e:
+            logger.error(f"Failed to fetch positions for {address}: {e}")
+            return []

@@ -43,7 +43,10 @@ class StrategyLearner:
         # Target: 1 if next close > current close, else 0
         data['target'] = (data['close'].shift(-1) > data['close']).astype(int)
         
-        # Drop NaNs created by rolling/shifting
+        # Handle Infinite values (e.g. division by zero)
+        data.replace([np.inf, -np.inf], np.nan, inplace=True)
+        
+        # Drop NaNs created by rolling/shifting or inf replacement
         data.dropna(inplace=True)
         
         return data

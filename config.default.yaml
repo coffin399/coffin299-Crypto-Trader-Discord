@@ -50,6 +50,7 @@ exchanges:
 # ------------------------------------------------------------------------------
 strategy:
   name: "coffin299strategy"
+  type: "coffin299" # Options: "coffin299", "copy_leaderboard"
   timeframe: "15m"
   leverage: 1  # Leverage multiplier default:5
   max_open_positions: 3

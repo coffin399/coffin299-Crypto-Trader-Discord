@@ -56,7 +56,15 @@ async def lifespan(app: FastAPI):
     await discord_notifier.start()
     
     # Init Strategy
-    strategy = Coffin299Strategy(config, exchange, ai, discord_notifier)
+    strategy_type = config['strategy'].get('type', 'coffin299')
+    if strategy_type == 'copy_leaderboard':
+        from src.strategy.coffin299_copy import Coffin299CopyStrategy
+        strategy = Coffin299CopyStrategy(config, exchange, ai, discord_notifier)
+        logger.info("Started in Copy Trading Mode")
+    else:
+        from src.strategy.coffin299 import Coffin299Strategy
+        strategy = Coffin299Strategy(config, exchange, ai, discord_notifier)
+        logger.info("Started in Standard AI Mode")
     
     bot_state["strategy"] = strategy
     bot_state["exchange"] = exchange
