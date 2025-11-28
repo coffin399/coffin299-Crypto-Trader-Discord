@@ -157,6 +157,19 @@ class Hyperliquid(BaseExchange):
             logger.error(f"Failed to fetch price for {pair}: {e}")
             return 0.0
 
+    async def get_all_prices(self):
+        """
+        Fetches prices for all coins in one request.
+        Returns: {'ETH': 3000.0, 'BTC': 90000.0, ...}
+        """
+        try:
+            all_mids = self.info.all_mids()
+            # Convert to float dict
+            return {k: float(v) for k, v in all_mids.items()}
+        except Exception as e:
+            logger.error(f"Failed to fetch all prices: {e}")
+            return {}
+
     async def get_ohlcv(self, pair, timeframe, since=None, limit=100):
         # Use CCXT for standardized data fetching
         try:

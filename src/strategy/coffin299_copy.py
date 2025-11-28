@@ -51,93 +51,21 @@ class Coffin299CopyStrategy:
                 
                 aggregate_positions[symbol][side] += 1
                 
-            await asyncio.sleep(2.0) # Increased delay to avoid 429 Rate Limits
-            
-        # 3. Decide & Execute
-        target_coins = self.config['strategy'].get('copy_trading', {}).get('target_coins', [])
-        min_concurrence = self.config['strategy'].get('copy_trading', {}).get('min_concurrence', 1)
-        
-        # logger.info(f"Aggregated Positions: {aggregate_positions}")
-        
-        for symbol, counts in aggregate_positions.items():
-            # Filter by target coins if specified
-            if target_coins and symbol not in target_coins:
-                continue
-                
-            longs = counts['LONG']
-            shorts = counts['SHORT']
-            total = longs + shorts
-            
-            if total >= min_concurrence: 
-                logger.info(f"Copy Signal for {symbol}: {longs} LONG vs {shorts} SHORT (Total: {total})")
-                
-                # Simple Majority Vote
-                if longs > shorts:
-                    # BUY
-                    await self.execute_copy_trade(symbol, "BUY", f"Copying {longs}/{total} top traders")
-                elif shorts > longs:
-                    # SELL
-                    await self.execute_copy_trade(symbol, "SELL", f"Copying {shorts}/{total} top traders")
-            
-            # Sleep between symbols to avoid rate limits on price checks
-            await asyncio.sleep(1.0)
+        my_pos = next((p for p in current_positions if p['symbol'] == symbol), None)
 
-    async def update_leaderboard(self):
-        logger.info("Updating Leaderboard...")
-        
-        # Try API
-        if hasattr(self.exchange, 'get_leaderboard_top_traders'):
-            self.top_traders = await self.exchange.get_leaderboard_top_traders(limit=self.config['strategy'].get('copy_trading', {}).get('leaderboard_limit', 5))
+        # Logic for SELL (Shorting vs Closing)
+        if side == "SELL":
+            # If we have a LONG position, this SELL is a CLOSE/REDUCE -> Always Allowed
+            if my_pos and my_pos['side'] == 'LONG' and my_pos['size'] > 0:
+                pass # Allowed (Closing Long)
             
-        # Fallback if empty
-        if not self.top_traders:
-            logger.warning("API Leaderboard fetch failed or empty. Using fallback addresses from config.")
-            fallback = self.config['strategy'].get('copy_trading', {}).get('fallback_addresses', [])
-            # Filter out placeholders
-            self.top_traders = [addr for addr in fallback if addr and "0x..." not in addr]
-            
-        logger.info(f"Top Traders to Copy: {self.top_traders}")
-        self.last_leaderboard_update = datetime.utcnow()
-
-    async def execute_copy_trade(self, symbol, side, reason):
-        pair = f"{symbol}/USDC"
-        
-        # 1. Safety Margin Check
-        safety_buffer_pct = self.config['strategy'].get('copy_trading', {}).get('safety_margin_buffer', 0.0)
-        
-        if safety_buffer_pct > 0:
-            balance = await self.exchange.get_balance()
-            total_equity = float(balance.get('total', {}).get('USDC', 0))
-            free_margin = float(balance.get('free', {}).get('USDC', 0))
-            
-            safety_threshold = total_equity * safety_buffer_pct
-            
-            is_low_balance = free_margin < safety_threshold
-            
-            if is_low_balance:
-                current_positions = await self.exchange.get_positions()
-                my_pos = next((p for p in current_positions if p['symbol'] == symbol), None)
-                
-                if not my_pos:
-                    logger.warning(f"Low Balance ({free_margin:.2f} < {safety_threshold:.2f}). Skipping OPEN trade for {pair}.")
+            # If we have NO position or a SHORT position, this SELL is a NEW SHORT or ADDING SHORT
+            else:
+                if not allow_short:
+                    logger.info(f"Skipping SELL (Short) for {pair} because allow_short is False.")
                     return
-                
-                is_closing = (side == 'BUY' and my_pos['side'] == 'SHORT') or \
-                             (side == 'SELL' and my_pos['side'] == 'LONG')
 
-                if not is_closing:
-                    logger.warning(f"Low Balance. Skipping trade that increases risk for {pair}.")
-                    return
-                else:
-                    logger.info(f"Low Balance. Allowing CLOSING trade for {pair}.")
-
-        # 2. Max Open Positions Check
-        max_positions = self.config['strategy'].get('max_open_positions', 0)
         if max_positions > 0:
-            current_positions = await self.exchange.get_positions()
-            # Check if we already have a position in this symbol
-            my_pos = next((p for p in current_positions if p['symbol'] == symbol), None)
-            
             # If we don't have a position, this is a new OPEN trade
             if not my_pos:
                 if len(current_positions) >= max_positions:

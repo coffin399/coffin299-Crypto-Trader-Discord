@@ -65,6 +65,7 @@ strategy:
     min_concurrence: 1 # Minimum number of traders holding a position to copy it
     safety_margin_buffer: 0.1 # If free margin < 10% of total, only allow closing trades
     max_quantity: 500 #JPY
+    allow_short: true # If false, only allow SELL to close existing LONG positions (no new SHORTs)
     
   # Paper Mode Settings
   paper_mode:
