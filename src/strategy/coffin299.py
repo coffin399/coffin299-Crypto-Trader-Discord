@@ -193,7 +193,9 @@ class Coffin299Strategy:
                 since_ts = last_ts + 1 
                 
                 # Safety break for infinite loops
-                if len(all_ohlcv) > 24 * 366 * 2: # Max 2 years hourly
+                # 1 year of 15m candles = 365 * 24 * 4 = 35040
+                # Set limit to 50000 to be safe
+                if len(all_ohlcv) > 50000: 
                     break
                     
                 # Small delay to respect rate limits
