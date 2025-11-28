@@ -1,91 +1,142 @@
+// Discord-like App Logic
+
+let currentChannel = 'trade-alerts';
+let lastLogCount = 0;
+let tradeHistory = []; // Store trade events locally for now, or fetch from server if available
+
+function switchChannel(channelName) {
+    currentChannel = channelName;
+    document.getElementById('current-channel-name').textContent = channelName;
+
+    // Update active class in sidebar
+    document.querySelectorAll('.channel-item').forEach(item => {
+        item.classList.remove('active');
+        if (item.textContent.includes(channelName)) {
+            item.classList.add('active');
+        }
+    });
+
+    renderChannelContent();
+}
+
+function renderChannelContent() {
+    const container = document.getElementById('chat-container');
+    container.innerHTML = ''; // Clear current content
+
+    if (currentChannel === 'trade-alerts') {
+        renderTradeAlerts(container);
+    } else if (currentChannel === 'logs') {
+        renderLogs(container);
+    } else if (currentChannel === 'config') {
+        container.innerHTML = '<div class="message"><div class="message-content">Configuration view not implemented yet. Check config.yaml</div></div>';
+    }
+
+    // Scroll to bottom
+    container.scrollTop = container.scrollHeight;
+}
+
+function renderTradeAlerts(container) {
+    if (tradeHistory.length === 0) {
+        container.innerHTML = `
+            <div class="message">
+                <div class="message-avatar"></div>
+                <div class="message-body">
+                    <div class="message-header">
+                        <span class="username">Coffin299 Bot</span>
+                        <span class="timestamp">System</span>
+                    </div>
+                    <div class="message-content">No trades executed yet. Waiting for signals...</div>
+                </div>
+            </div>`;
+        return;
+    }
+
+    tradeHistory.forEach(trade => {
+        const msgDiv = document.createElement('div');
+        msgDiv.className = 'message';
+
+        const color = trade.side === 'BUY' ? '#3ba55c' : '#ed4245';
+
+        msgDiv.innerHTML = `
+            <div class="message-avatar"></div>
+            <div class="message-body">
+                <div class="message-header">
+                    <span class="username">Coffin299 Bot</span>
+                    <span class="timestamp">${trade.time}</span>
+                </div>
+                <div class="embed" style="border-left-color: ${color}">
+                    <div class="embed-title">${trade.side} ${trade.symbol}</div>
+                    <div class="embed-field">
+                        <div class="embed-field-name">Price</div>
+                        <div class="embed-field-value">${trade.price}</div>
+                    </div>
+                    <div class="embed-field">
+                        <div class="embed-field-name">Amount</div>
+                        <div class="embed-field-value">${trade.amount}</div>
+                    </div>
+                    <div class="embed-field">
+                        <div class="embed-field-name">Reason</div>
+                        <div class="embed-field-value">${trade.reason}</div>
+                    </div>
+                </div>
+            </div>
+        `;
+        container.appendChild(msgDiv);
+    });
+}
+
+function renderLogs(container) {
+    // We fetch logs from global state or API
+    // For now, we use the logs we fetched in updateStatus
+    if (!window.latestLogs) return;
+
+    window.latestLogs.forEach(log => {
+        const msgDiv = document.createElement('div');
+        msgDiv.className = 'message';
+        msgDiv.style.marginBottom = '4px'; // Compact logs
+
+        // Simple log formatting
+        let color = '#dcddde';
+        if (log.includes('ERROR')) color = '#ed4245';
+        if (log.includes('WARNING')) color = '#faa61a';
+        if (log.includes('SUCCESS')) color = '#3ba55c';
+
+        msgDiv.innerHTML = `
+            <div class="message-content" style="color: ${color}; font-family: monospace; font-size: 12px;">
+                ${log}
+            </div>
+        `;
+        container.appendChild(msgDiv);
+    });
+}
+
 async function updateStatus() {
     try {
         const response = await fetch('/api/status');
         const data = await response.json();
 
-        // Update Status Badge
-        const statusBadge = document.getElementById('bot-status');
-        statusBadge.textContent = data.status;
-        if (data.status === 'Running') {
-            statusBadge.style.color = 'var(--success-color)';
-            statusBadge.style.background = 'rgba(16, 185, 129, 0.2)';
-        }
-
-        // Update Balance
-        const balanceDisplay = document.getElementById('balance-display');
-        const balanceDetail = document.getElementById('balance-detail');
-
-        let total = 0;
-        let details = [];
-
-        // Simple balance formatting
-        if (data.balance) {
-            // Check if balance has 'total' key (standardized structure)
-            const assets = data.balance.total || data.balance;
-
-            for (const [coin, amount] of Object.entries(assets)) {
-                if (amount > 0) {
-                    details.push(`${parseFloat(amount).toFixed(4)} ${coin}`);
-                }
-            }
-            balanceDisplay.textContent = details.length > 0 ? details[0] : "0.00";
-
-            // JPY Display
-            if (data.total_jpy) {
-                const jpyFormatted = new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY' }).format(data.total_jpy);
-                // Show other assets if any
-                const otherAssets = details.slice(1).join(', ');
-                balanceDetail.innerHTML = `${otherAssets ? otherAssets + '<br>' : ''} <span style="color: #a0a0a0; font-size: 0.9em;">Total Est: ${jpyFormatted}</span>`;
-            } else {
-                balanceDetail.textContent = details.slice(1).join(', ') || "No Assets";
-            }
-        }
-
-        // Update Strategy Info
-        document.getElementById('target-pair').textContent = data.target_pair || "---";
-
-        const signalEl = document.getElementById('ai-signal');
-        const rec = data.recommendation;
-
-        if (rec) {
-            signalEl.textContent = rec.action;
-            signalEl.className = 'value'; // reset
-            if (rec.action === 'BUY') signalEl.classList.add('signal-buy');
-            if (rec.action === 'SELL') signalEl.classList.add('signal-sell');
-
-            document.getElementById('ai-confidence').textContent = rec.confidence || "---";
-        }
+        // Update Member List (Right Sidebar)
+        updateMembers(data);
 
         // Update Logs
-        if (data.logs && data.logs.length > 0) {
-            const logList = document.getElementById('log-list');
-            logList.innerHTML = ''; // Clear existing
-            // Show last 20 logs reversed
-            data.logs.slice().reverse().slice(0, 20).forEach(log => {
-                const li = document.createElement('li');
-                li.textContent = log;
-                logList.appendChild(li);
-            });
-        }
+        window.latestLogs = data.logs || [];
 
-        // Update Positions
-        const posList = document.getElementById('positions-list');
-        if (data.positions && data.positions.length > 0) {
-            posList.innerHTML = '';
-            data.positions.forEach(pos => {
-                const tr = document.createElement('tr');
-                const pnlClass = pos.pnl >= 0 ? 'pnl-green' : 'pnl-red';
-                tr.innerHTML = `
-                    <td>${pos.symbol}</td>
-                    <td class="${pos.side === 'LONG' ? 'text-green' : 'text-red'}">${pos.side}</td>
-                    <td>${pos.size}</td>
-                    <td>${pos.entry_price.toFixed(4)}</td>
-                    <td class="${pnlClass}">${pos.pnl.toFixed(2)}</td>
-                `;
-                posList.appendChild(tr);
-            });
-        } else {
-            posList.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#666; padding: 1rem;">No open positions</td></tr>';
+        // Parse logs for "Trade Executed" events to populate tradeHistory (Hack since we don't have a DB endpoint yet)
+        parseLogsForTrades(data.logs);
+
+        // Re-render current channel if needed (or just append? For now re-render is safer but slower)
+        // Optimization: Only re-render if data changed or just append new logs.
+        // For simplicity in this demo: Re-render if channel is active.
+        if (currentChannel === 'logs' && data.logs.length !== lastLogCount) {
+            renderChannelContent();
+            lastLogCount = data.logs.length;
+        } else if (currentChannel === 'trade-alerts') {
+            // Only re-render if history count changed
+            // We can check length of tradeHistory vs rendered elements
+            const renderedCount = document.getElementById('chat-container').children.length;
+            if (tradeHistory.length > 0 && (renderedCount <= 1 && tradeHistory.length > 0 || renderedCount !== tradeHistory.length)) {
+                renderChannelContent();
+            }
         }
 
     } catch (error) {
@@ -93,52 +144,96 @@ async function updateStatus() {
     }
 }
 
-// Poll every 5 seconds
-// Poll every 5 seconds
-setInterval(updateStatus, 5000);
-updateStatus();
+function updateMembers(data) {
+    // Bot Status
+    const statusText = document.getElementById('bot-status-text');
+    if (statusText) statusText.textContent = data.status;
 
-// MetaMask Connection
-const connectBtn = document.getElementById('connect-wallet');
+    // Balance
+    const balanceContainer = document.getElementById('balance-container');
+    if (balanceContainer && data.balance) {
+        let html = '';
 
-if (typeof window.ethereum !== 'undefined') {
-    connectBtn.addEventListener('click', async () => {
-        try {
-            const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-            const account = accounts[0];
-
-            // Update button state
-            connectBtn.innerHTML = `
-                <i data-lucide="check-circle"></i>
-                <span>${account.substring(0, 6)}...${account.substring(38)}</span>
-            `;
-            connectBtn.classList.add('connected');
-            lucide.createIcons();
-
-            console.log('Connected to MetaMask:', account);
-
-            // Optional: Send address to backend if needed
-            // fetch('/api/wallet/connect', { method: 'POST', body: JSON.stringify({ address: account }) });
-
-        } catch (error) {
-            console.error('User denied account access', error);
-            alert('Failed to connect wallet: ' + error.message);
+        // Total JPY
+        if (data.total_jpy) {
+            html += `
+                <div class="balance-card">
+                    <div class="member-subtext">Total Est. Value</div>
+                    <div class="member-name text-green">¥${Math.floor(data.total_jpy).toLocaleString()}</div>
+                </div>`;
         }
-    });
 
-    // Check if already connected
-    window.ethereum.request({ method: 'eth_accounts' }).then(accounts => {
-        if (accounts.length > 0) {
-            const account = accounts[0];
-            connectBtn.innerHTML = `
-                <i data-lucide="check-circle"></i>
-                <span>${account.substring(0, 6)}...${account.substring(38)}</span>
-            `;
-            connectBtn.classList.add('connected');
-            lucide.createIcons();
+        // Coins
+        const balances = data.balance.total || {};
+        for (const [coin, amount] of Object.entries(balances)) {
+            if (parseFloat(amount) > 0) {
+                html += `
+                <div class="balance-card">
+                    <div class="member-subtext">${coin}</div>
+                    <div class="member-name">${parseFloat(amount).toFixed(4)}</div>
+                </div>`;
+            }
         }
-    });
-} else {
-    connectBtn.style.display = 'none';
-    console.log('MetaMask not installed');
+        balanceContainer.innerHTML = html;
+    }
+
+    // Positions
+    const posContainer = document.getElementById('positions-container');
+    if (posContainer && data.positions) {
+        if (data.positions.length === 0) {
+            posContainer.innerHTML = '<div class="member-subtext" style="padding: 8px;">No open positions</div>';
+        } else {
+            let html = '';
+            data.positions.forEach(pos => {
+                const sideClass = pos.side === 'LONG' ? 'long' : 'short';
+                const pnlClass = pos.pnl >= 0 ? 'text-green' : 'text-red';
+
+                html += `
+                <div class="position-card ${sideClass}">
+                    <div class="member-name">${pos.symbol} <span style="font-size: 10px; opacity: 0.7">${pos.side}</span></div>
+                    <div class="member-subtext">Size: ${pos.size}</div>
+                    <div class="member-subtext">Entry: ${pos.entry_price}</div>
+                    <div class="member-subtext ${pnlClass}">PnL: ${pos.pnl.toFixed(2)}</div>
+                </div>`;
+            });
+            posContainer.innerHTML = html;
+        }
+    }
 }
+
+function parseLogsForTrades(logs) {
+    // Look for "EXECUTING COPY TRADE: SIDE PAIR @ PRICE (REASON)"
+    // Example: "EXECUTING COPY TRADE: BUY ETH/USDC @ 3000 (Copying 2/3...)"
+    // Or "Trade Executed: {...}"
+
+    // We clear and rebuild history from logs to avoid duplicates for this simple implementation
+    // In a real app, we'd append unique IDs.
+
+    const newHistory = [];
+    const regex = /EXECUTING COPY TRADE: (BUY|SELL) (\S+) @ ([\d.]+) \((.*)\)/;
+
+    logs.forEach(log => {
+        const match = log.match(regex);
+        if (match) {
+            // Extract timestamp from log line start "YYYY-MM-DD HH:MM:SS"
+            const timeMatch = log.match(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/);
+            const time = timeMatch ? timeMatch[0] : 'Unknown Time';
+
+            newHistory.push({
+                time: time,
+                side: match[1],
+                symbol: match[2],
+                price: match[3],
+                amount: "0.01", // Mock amount as it's not always in that specific log line
+                reason: match[4]
+            });
+        }
+    });
+
+    tradeHistory = newHistory;
+}
+
+// Initial Load
+renderChannelContent();
+setInterval(updateStatus, 2000); // Poll every 2 seconds
+updateStatus();

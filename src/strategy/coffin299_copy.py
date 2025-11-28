@@ -1,23 +1,3 @@
-import asyncio
-from datetime import datetime, timedelta
-from ..logger import setup_logger
-
-logger = setup_logger("strategy_copy")
-
-class Coffin299CopyStrategy:
-    def __init__(self, config, exchange, ai_service, notifier):
-        self.config = config
-        self.exchange = exchange
-        self.ai = ai_service
-        self.notifier = notifier
-        
-        self.target_pair = "COPY_TRADING" # Virtual pair name
-        self.current_recommendation = {"action": "COPY", "confidence": 1.0}
-        
-        # Cache
-        self.top_traders = []
-        self.last_leaderboard_update = datetime.min
-        
     async def run_cycle(self):
         """
         Main copy strategy cycle.
@@ -166,7 +146,12 @@ class Coffin299CopyStrategy:
             order = await self.exchange.create_order(pair, 'market', order_side, amount)
             if order:
                 logger.info(f"Trade Executed: {order}")
-                await self.notifier.notify_trade(side, pair, price, str(amount), reason)
+                
+                # Calculate JPY Value
+                # Value = amount * price * self.jpy_rate
+                total_jpy = amount * price * self.jpy_rate
+                
+                await self.notifier.notify_trade(side, pair, price, str(amount), reason, total_jpy=total_jpy)
             else:
                 logger.error("Trade Execution Failed")
         except Exception as e:
