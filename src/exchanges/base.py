@@ -14,6 +14,14 @@ class BaseExchange(ABC):
         if self.paper_mode:
             logger.info("Initialized in PAPER MODE")
             logger.info(f"Initial Paper Balance: {self.paper_balance}")
+            
+            # Load positions from DB
+            from ..database import PositionDB
+            self.db = PositionDB()
+            loaded_positions = self.db.load_positions()
+            if loaded_positions:
+                self.positions = loaded_positions
+                logger.info(f"Loaded {len(self.positions)} paper positions from DB.")
 
     @abstractmethod
     async def get_balance(self):
@@ -70,6 +78,10 @@ class BaseExchange(ABC):
                     if new_amt == 0:
                         del self.positions[pair]
                 
+                # Save to DB
+                if hasattr(self, 'db'):
+                    self.db.save_position(pair, self.positions.get(pair, {}).get('amount', 0), self.positions.get(pair, {}).get('entry_price', 0))
+
                 return {'id': f'paper_{int(time.time())}', 'status': 'closed', 'filled': amount, 'price': price}
             else:
                 logger.warning("Paper Mode: Insufficient funds (Balance <= 0)")
@@ -96,6 +108,10 @@ class BaseExchange(ABC):
                     if new_amt == 0:
                         del self.positions[pair]
                     
+                # Save to DB
+                if hasattr(self, 'db'):
+                    self.db.save_position(pair, self.positions.get(pair, {}).get('amount', 0), self.positions.get(pair, {}).get('entry_price', 0))
+
                 return {'id': f'paper_{int(time.time())}', 'status': 'closed', 'filled': amount, 'price': price}
             else:
                 logger.warning("Paper Mode: Insufficient funds (Balance <= 0)")
