@@ -39,7 +39,6 @@ class Hyperliquid(BaseExchange):
         
         try:
             user_state = self.info.user_state(self.wallet_address)
-            # Convert to standard format
             # user_state['marginSummary'] contains total equity
             # user_state['assetPositions'] contains positions
             
@@ -58,6 +57,47 @@ class Hyperliquid(BaseExchange):
             logger.error(f"Failed to fetch Hyperliquid balance: {e}")
             return {}
 
+    async def get_positions(self):
+        """
+        Returns a list of open positions.
+        Format: [{'symbol': 'ETH', 'size': 1.0, 'entry_price': 3000, 'pnl': 50, 'side': 'LONG'}]
+        """
+        if self.paper_mode:
+            # TODO: Implement paper positions tracking
+            return []
+            
+        try:
+            user_state = self.info.user_state(self.wallet_address)
+            raw_positions = user_state.get('assetPositions', [])
+            
+            positions = []
+            for p in raw_positions:
+                pos = p.get('position', {})
+                size = float(pos.get('szi', 0))
+                if size == 0: continue
+                
+                entry_price = float(pos.get('entryPx', 0))
+                symbol = pos.get('coin', 'Unknown')
+                
+                # Calculate PnL (Unrealized)
+                # We need current price. 
+                # For efficiency, we might skip exact PnL or fetch it.
+                # Hyperliquid user_state might have it? 
+                # 'unrealizedPnl' is in position?
+                pnl = float(pos.get('unrealizedPnl', 0))
+                
+                positions.append({
+                    'symbol': symbol,
+                    'size': abs(size),
+                    'side': 'LONG' if size > 0 else 'SHORT',
+                    'entry_price': entry_price,
+                    'pnl': pnl
+                })
+            return positions
+        except Exception as e:
+            logger.error(f"Failed to fetch positions: {e}")
+            return []
+
     async def get_market_price(self, pair):
         try:
             # pair format: ETH/USDC -> ETH
@@ -68,12 +108,29 @@ class Hyperliquid(BaseExchange):
             logger.error(f"Failed to fetch price for {pair}: {e}")
             return 0.0
 
-    async def get_ohlcv(self, pair, timeframe, limit=100):
+    async def get_ohlcv(self, pair, timeframe, since=None, limit=100):
         try:
             coin = pair.split('/')[0]
             # Map timeframe to Hyperliquid format if needed
             # SDK candles_snapshot(coin, interval, startTime, endTime)
-            candles = self.info.candles_snapshot(coin, timeframe, 0, int(limit * 1000)) # Simplified
+            
+            start_time = since if since else 0
+            # If since is provided, we want data FROM that time.
+            # If not, we might want recent data.
+            
+            # Hyperliquid 'candles_snapshot' seems to return data between start and end.
+            # We need to ensure we get enough data.
+            
+            end_time = int(datetime.now().timestamp() * 1000)
+            
+            # If we are paginating, 'since' is the start.
+            # We can request a large chunk.
+            
+            candles = self.info.candles_snapshot(coin, timeframe, start_time, end_time)
+            
+            # Filter/Limit if needed (SDK might return all in range)
+            # If we got too many, we might slice, but usually we want all for training.
+            # But the caller expects 'limit' roughly or just a batch.
             
             # Convert to standard OHLCV
             # [timestamp, open, high, low, close, volume]
@@ -87,6 +144,13 @@ class Hyperliquid(BaseExchange):
                     float(c['c']),
                     float(c['v'])
                 ])
+            
+            # Sort by time just in case
+            formatted.sort(key=lambda x: x[0])
+            
+            # If limit is strict, we might slice, but for history fetch we usually want max.
+            # The caller 'fetch_historical_data' handles pagination loop.
+            
             return formatted
         except Exception as e:
             logger.error(f"Failed to fetch OHLCV: {e}")

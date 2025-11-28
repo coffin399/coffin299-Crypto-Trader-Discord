@@ -20,12 +20,12 @@ async function updateStatus() {
 
         // Simple balance formatting
         if (data.balance) {
-            // Assuming balance is a dict like {'BTC': 1.0, 'USDC': 1000}
-            // For display, we might want to convert to JPY or USD total if we had prices
-            // For now, just show the first non-zero or total count
-            for (const [coin, amount] of Object.entries(data.balance)) {
+            // Check if balance has 'total' key (standardized structure)
+            const assets = data.balance.total || data.balance;
+
+            for (const [coin, amount] of Object.entries(assets)) {
                 if (amount > 0) {
-                    details.push(`${amount.toFixed(4)} ${coin}`);
+                    details.push(`${parseFloat(amount).toFixed(4)} ${coin}`);
                 }
             }
             balanceDisplay.textContent = details.length > 0 ? details[0] : "0.00";
@@ -33,9 +33,11 @@ async function updateStatus() {
             // JPY Display
             if (data.total_jpy) {
                 const jpyFormatted = new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY' }).format(data.total_jpy);
-                balanceDetail.innerHTML = `${details.slice(1).join(', ') || "Assets"} <br> <span style="color: #a0a0a0; font-size: 0.9em;">Total: ${jpyFormatted}</span>`;
+                // Show other assets if any
+                const otherAssets = details.slice(1).join(', ');
+                balanceDetail.innerHTML = `${otherAssets ? otherAssets + '<br>' : ''} <span style="color: #a0a0a0; font-size: 0.9em;">Total Est: ${jpyFormatted}</span>`;
             } else {
-                balanceDetail.textContent = details.slice(1).join(', ') || "Assets";
+                balanceDetail.textContent = details.slice(1).join(', ') || "No Assets";
             }
         }
 
@@ -64,6 +66,26 @@ async function updateStatus() {
                 li.textContent = log;
                 logList.appendChild(li);
             });
+        }
+
+        // Update Positions
+        const posList = document.getElementById('positions-list');
+        if (data.positions && data.positions.length > 0) {
+            posList.innerHTML = '';
+            data.positions.forEach(pos => {
+                const tr = document.createElement('tr');
+                const pnlClass = pos.pnl >= 0 ? 'pnl-green' : 'pnl-red';
+                tr.innerHTML = `
+                    <td>${pos.symbol}</td>
+                    <td class="${pos.side === 'LONG' ? 'text-green' : 'text-red'}">${pos.side}</td>
+                    <td>${pos.size}</td>
+                    <td>${pos.entry_price.toFixed(4)}</td>
+                    <td class="${pnlClass}">${pos.pnl.toFixed(2)}</td>
+                `;
+                posList.appendChild(tr);
+            });
+        } else {
+            posList.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#666; padding: 1rem;">No open positions</td></tr>';
         }
 
     } catch (error) {

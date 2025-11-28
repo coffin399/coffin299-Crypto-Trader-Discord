@@ -136,6 +136,11 @@ async def get_status():
     except Exception as e:
         logger.error(f"Error calculating JPY: {e}")
 
+    # Fetch Positions
+    positions = []
+    if hasattr(exchange, 'get_positions'):
+        positions = await exchange.get_positions()
+
     return {
         "status": "Running",
         "target_pair": strategy.target_pair,
@@ -143,6 +148,7 @@ async def get_status():
         "balance": balance,
         "total_jpy": total_jpy,
         "paper_mode": exchange.paper_mode,
+        "positions": positions,
         "logs": list(log_buffer)
     }
 
