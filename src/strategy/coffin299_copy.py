@@ -144,6 +144,83 @@ class Coffin299CopyStrategy:
         # 2. Max Open Positions Check
         max_positions = self.config['strategy'].get('max_open_positions', 0)
         allow_short = self.config['strategy'].get('copy_trading', {}).get('allow_short', True)
+        current_positions = await self.exchange.get_positions()
+        my_pos = next((p for p in current_positions if p['symbol'] == symbol), None)
+
+        # Logic for SELL (Shorting vs Closing)
+        if side == "SELL":
+            # If we have a LONG position, this SELL is a CLOSE/REDUCE -> Always Allowed
+            if my_pos and my_pos['side'] == 'LONG' and my_pos['size'] > 0:
+                pass # Allowed (Closing Long)
+            
+            # If we have NO position or a SHORT position, this SELL is a NEW SHORT or ADDING SHORT
+            else:
+                if not allow_short:
+                    logger.info(f"Skipping SELL (Short) for {pair} because allow_short is False.")
+                    return
+
+        if max_positions > 0:
+            # If we don't have a position, this is a new OPEN trade
+            if not my_pos:
+                if len(current_positions) >= max_positions:
+                    logger.warning(f"Max Open Positions Reached ({len(current_positions)}/{max_positions}). Skipping OPEN trade for {pair}.")
+                    return
+
+        if not price or price <= 0:
+            price = await self.exchange.get_market_price(pair)
+            
+        if not price or price <= 0:
+            logger.error(f"Cannot execute trade for {pair}: Invalid Price {price}")
+            return
+        
+        logger.info(f"EXECUTING COPY TRADE: {side} {pair} @ {price} ({reason})")
+        
+        order_side = side.lower()
+        
+        # Calculate Amount based on max_quantity (JPY)
+        max_quantity_jpy = self.config['strategy'].get('copy_trading', {}).get('max_quantity', 1500)
+        
+        # 1. Convert JPY to USD
+        usd_value = max_quantity_jpy / self.jpy_rate
+        
+        # Check if we already have a position in this direction
+        if my_pos:
+            current_side = my_pos['side'] # LONG or SHORT
+            # If we are already LONG and want to BUY
+            if side == 'BUY' and current_side == 'LONG':
+                current_val = my_pos.get('value', 0)
+                if current_val >= usd_value * 0.9: # 90% threshold
+                    # logger.info(f"Already have LONG position for {pair} (${current_val:.2f}). Skipping.")
+                    return
+            # If we are already SHORT and want to SELL
+            elif side == 'SELL' and current_side == 'SHORT':
+                current_val = my_pos.get('value', 0)
+                if current_val >= usd_value * 0.9:
+                    # logger.info(f"Already have SHORT position for {pair} (${current_val:.2f}). Skipping.")
+                    return
+
+        # 2. Convert USD to Token Amount
+        # Amount = USD / Price
+        amount = usd_value / price
+        
+        # Rounding
+        amount = round(amount, 6)
+        
+        if amount <= 0:
+            logger.warning(f"Calculated amount is too small: {amount} (JPY: {max_quantity_jpy}, Price: {price})")
+            return
+        
+        try:
+            order = await self.exchange.create_order(pair, 'market', order_side, amount)
+            if order:
+                logger.info(f"Trade Executed: {order}")
+                
+                # Calculate JPY Value (Actual)
+                total_jpy = amount * price * self.jpy_rate
+                
+                await self.notifier.notify_trade(side, pair, price, str(amount), reason, total_jpy=total_jpy)
+            else:
+                logger.error("Trade Execution Failed")
         except Exception as e:
             logger.error(f"Trade Execution Error: {e}")
 
