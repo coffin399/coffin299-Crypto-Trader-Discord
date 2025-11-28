@@ -1,33 +1,63 @@
-<!-- Right Sidebar (Members/Status) -->
-<div class="members-sidebar">
-    <div class="members-category">Bot Status</div>
-    <div class="member-item">
-        <div class="member-avatar">
-            <div class="status-indicator"></div>
-        </div>
-        <div class="member-info">
-            <div class="member-name">Coffin299 Bot</div>
-            <div class="member-subtext" id="bot-status-text">Online</div>
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Coffin299 Trader</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Fira+Code&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <h1>Coffin299 Trader</h1>
+            <div id="status-indicator">Running</div>
+        </header>
+
+        <div class="grid">
+            <!-- Left Column -->
+            <div class="col">
+                <div class="card">
+                    <h2>Wallet Balance</h2>
+                    <div class="total-value" id="total-jpy">¥0</div>
+                    <div id="balance-list">
+                        <!-- Balance items injected here -->
+                    </div>
+                </div>
+
+                <div class="card" style="margin-top: 20px;">
+                    <h2>Open Positions</h2>
+                    <table id="positions-table">
+                        <thead>
+                            <tr>
+                                <th>Symbol</th>
+                                <th>Side</th>
+                                <th>Size</th>
+                                <th>PnL</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Positions injected here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Right Column -->
+            <div class="col">
+                <div class="card">
+                    <h2>Trade Log</h2>
+                    <div class="log-container" id="log-container">
+                        <!-- Logs injected here -->
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
-
-    <div class="members-category">Wallet Balance</div>
-    <div id="balance-container">
-        <!-- Balance items injected here -->
-        <div class="balance-card">
-            <div class="member-subtext">Total Equity</div>
-            <div class="member-name">Loading...</div>
-        </div>
-    </div>
-
-    <div class="members-category">Open Positions</div>
-    <div id="positions-container">
-        <!-- Positions injected here -->
-        <div class="member-subtext" style="padding: 8px;">No open positions</div>
-    </div>
-</div>
-
-<script src="/static/app.js"></script>
+    <script src="/static/app.js"></script>
 </body>
 
 </html>

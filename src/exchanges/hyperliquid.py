@@ -55,7 +55,15 @@ class Hyperliquid(BaseExchange):
                 self.paper_balance['USDC'] = usdc_bal + conv_val
                 logger.info(f"Paper Mode: Converted {eth_bal} ETH to {conv_val:.2f} USDC for trading.")
                 
-            return self.paper_balance
+                self.paper_balance['USDC'] = usdc_bal + conv_val
+                logger.info(f"Paper Mode: Converted {eth_bal} ETH to {conv_val:.2f} USDC for trading.")
+                
+            # Return standard structure matching real mode
+            return {
+                'total': {'USDC': self.paper_balance.get('USDC', 0)},
+                'free': {'USDC': self.paper_balance.get('USDC', 0)},
+                'used': {'USDC': 0.0} # Simplified
+            }
         
         try:
             user_state = self.info.user_state(self.wallet_address)
