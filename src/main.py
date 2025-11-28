@@ -61,6 +61,8 @@ async def start_bot():
     # Start Exchange WebSocket if supported
     if exchange_name == 'tread_fi':
         asyncio.create_task(exchange.start_websocket())
+    elif exchange_name == 'hyperliquid':
+        asyncio.create_task(exchange.start_websocket())
     
     # Init Strategy
     strategy_type = config['strategy'].get('type', 'coffin299')

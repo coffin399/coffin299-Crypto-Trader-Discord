@@ -158,9 +158,55 @@ class Hyperliquid(BaseExchange):
             logger.error(f"Failed to fetch positions: {e}")
             return []
 
+    async def start_websocket(self):
+        """
+        Starts the WebSocket connection to listen for price updates (allMids).
+        """
+        import websockets
+        import json
+        
+        ws_url = "wss://api.hyperliquid-testnet.xyz/ws" if self.testnet else "wss://api.hyperliquid.xyz/ws"
+        logger.info(f"Connecting to WebSocket: {ws_url}")
+        
+        self.price_cache = {}
+        
+        while True:
+            try:
+                async with websockets.connect(ws_url) as websocket:
+                    logger.info("WebSocket Connected")
+                    
+                    # Subscribe to allMids
+                    subscribe_msg = {
+                        "method": "subscribe",
+                        "subscription": {"type": "allMids"}
+                    }
+                    await websocket.send(json.dumps(subscribe_msg))
+                    
+                    while True:
+                        msg = await websocket.recv()
+                        data = json.loads(msg)
+                        
+                        channel = data.get("channel")
+                        if channel == "allMids":
+                            # data['data']['mids'] is dictionary of {coin: price}
+                            mids = data.get("data", {}).get("mids", {})
+                            for coin, price in mids.items():
+                                self.price_cache[coin] = float(price)
+                                
+            except Exception as e:
+                logger.error(f"WebSocket Error: {e}. Reconnecting in 5s...")
+                await asyncio.sleep(5)
+
     async def get_market_price(self, pair):
+        # Use cache if available
+        if hasattr(self, 'price_cache') and self.price_cache:
+            coin = pair.split('/')[0]
+            price = self.price_cache.get(coin)
+            if price:
+                return price
+                
+        # Fallback to REST
         try:
-            # pair format: ETH/USDC -> ETH
             coin = pair.split('/')[0]
             all_mids = self.info.all_mids()
             return float(all_mids.get(coin, 0))
@@ -170,12 +216,13 @@ class Hyperliquid(BaseExchange):
 
     async def get_all_prices(self):
         """
-        Fetches prices for all coins in one request.
-        Returns: {'ETH': 3000.0, 'BTC': 90000.0, ...}
+        Fetches prices for all coins. Uses WS cache if available.
         """
+        if hasattr(self, 'price_cache') and self.price_cache:
+            return self.price_cache.copy()
+            
         try:
             all_mids = self.info.all_mids()
-            # Convert to float dict
             return {k: float(v) for k, v in all_mids.items()}
         except Exception as e:
             logger.error(f"Failed to fetch all prices: {e}")
@@ -191,24 +238,12 @@ class Hyperliquid(BaseExchange):
                     'enableRateLimit': True,
                     'options': {'defaultType': 'future'}
                 })
-                # If we have keys, we could set them, but for public data it's not needed.
-                # self.ccxt_client.apiKey = ...
-            
-            # Map timeframe if needed (CCXT standard is usually fine)
-            
-            # Fetch
-            # CCXT handles pagination if we loop, but here we fetch one batch.
-            # The caller (strategy) handles the loop.
             
             ohlcv = await self.ccxt_client.fetch_ohlcv(pair, timeframe, since, limit)
-            
-            # CCXT returns [timestamp, open, high, low, close, volume]
             return ohlcv
             
         except Exception as e:
             logger.error(f"CCXT Fetch Failed: {e}")
-            # Fallback to SDK if CCXT fails?
-            # For now, just return empty to trigger retry or error
             return []
             
     async def close(self):
