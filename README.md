@@ -1,91 +1,80 @@
-# Coffin299 Crypto Trader ⚰️📈
+# Coffin299 Crypto Trader
 
-Google GenAI (Gemini) と **機械学習 (Random Forest)** を融合させた、自律型暗号資産トレーディングボットです。
-「バンバン買ってバンバン売る」アグレッシブな戦略（Coffin299 Strategy）を実行し、2025年の強気相場をターゲットにしています。
+A high-performance, AI-driven crypto trading bot designed for the 2025 bull run.
+Now optimized for **Hyperliquid** with Copy Trading and Real-time WebSocket support.
 
-## ✨ 主な機能
+## 🚀 Key Features
 
-- **🧠 AI & 機械学習のハイブリッド戦略**:
-  - **Gemini 2.5 Pro**: 市場全体を分析し、最適な**取引ペア（通貨）を選定**します。
-  - **Random Forest (scikit-learn)**: 選定されたペアの**過去1年分のデータ**を自動で取得・学習し、高精度な売買シグナル（BUY/SELL）を生成します。
-  - **自動再学習**: Geminiが新しいペアを推奨すると、即座にそのペアの過去データを取得し、モデルを再学習させます。
-- **⚡ Intel N100 最適化**:
-  - 省電力CPU（Intel N100等）でも快適に動作するように、学習プロセスをマルチコア並列化＆非同期スレッド化。
-  - ボットのメインループを止めることなく、バックグラウンドで学習を行います。
-- **🔄 APIキーローテーション**: 複数のGemini APIキーを登録し、リクエストごとに自動で切り替えることでレート制限を回避します。
-- **💻 モダンWebUI**: 
-  - スタイリッシュなダークテーマのダッシュボード（ポート8088）
-  - **MetaMask連携**: WebUIからMetaMaskを接続し、ウォレットアドレスを表示可能
-  - 資産状況やAIの判断をリアルタイムに可視化
-- **📢 Discord Bot連携**:
-  - **Trade Alerts**: 売買実行時にDiscordに通知
-  - **Wallet Updates**: 1時間ごとの資産状況（JPY換算）をDiscordに通知
-  - チャンネルを個別に設定可能
-- **💸 資金管理**:
-  - **Paper Mode**: ETHを元手としたデモトレード機能（初期設定: 0.044 ETH 約2万円）。
-  - **Keyless Hyperliquid Paper Mode**: HyperliquidのPaper Modeは**APIキー（秘密鍵）なし**で動作可能。デポジット不要で戦略テストができます。
-  - **Base Currency**: ETH基軸で運用し、USDC建てで取引を行います。
-- **🔌 対応取引所**:
-  - **Binance Japan**: 国内取引所
-  - **Hyperliquid**: 高速DEX（Paper Modeはキー不要）
-  - **Tread.fi**: アルゴリズム取引プラットフォーム
+*   **Hyperliquid Native**: Optimized for the Hyperliquid DEX (Perpetuals).
+*   **Copy Trading**: Automatically copy top traders from the Hyperliquid leaderboard.
+*   **Real-time Data**: Uses WebSockets for millisecond-latency price updates.
+*   **AI Analysis**: Integrates Google Gemini AI for market sentiment analysis (optional).
+*   **Paper Mode**: Risk-free simulation with persistent position tracking (SQLite).
+*   **Discord Notifications**: Get real-time alerts for trades and hourly wallet reports.
 
-## 🚀 インストールと起動
+## 🛠 Prerequisites
 
-### 必須要件
-- Windows
-- Python 3.11
+*   **Python 3.11+**
+*   **Hyperliquid Account** (Private Key required for real trading)
+*   **Discord Bot Token** (for notifications)
+*   **Google Gemini API Key** (for AI analysis)
 
-### セットアップ手順
+## 📦 Installation
 
-1. **リポジトリの準備**
-   このフォルダを任意の場所に配置します。
+1.  **Clone the repository**
+    ```bash
+    git clone https://github.com/your-repo/coffin299-trader.git
+    cd coffin299-trader
+    ```
 
-2. **設定ファイルの編集**
-   `config.default.yaml` を `config.yaml` という名前でコピーし、以下の項目を設定してください。
-   - **ai.api_keys**: Gemini APIキーのリスト（複数登録推奨）
-   - **discord.bot_token**: Discord Botのトークン
-   - **discord.channels**: 通知先のチャンネルID
-   - **active_exchange**: 使用する取引所を選択 (`hyperliquid` 推奨)
+2.  **Run the setup script**
+    Double-click `run_bot.bat`.
+    This will create a virtual environment, install dependencies, and start the bot.
 
-3. **起動**
-   `run_bot.bat` をダブルクリックして実行してください。
-   - 自動的に仮想環境（.venv）が作成され、依存ライブラリがインストールされます。
-   - 初回起動時、**過去1年分のデータ取得とAI学習**が始まります（数秒〜数十秒かかります）。
-   - 起動後、ブラウザで `http://localhost:8088` にアクセスするとダッシュボードが表示されます。
+3.  **Configuration**
+    The first run will generate a `config.yaml` file from `config.default.yaml`.
+    Edit `config.yaml` with your settings.
 
-## ⚙️ 設定 (config.yaml)
+## ⚙️ Configuration Guide (`config.yaml`)
 
-| 項目 | 説明 |
-| :--- | :--- |
-| `active_exchange` | 使用する取引所 (`hyperliquid`, `binance_japan`, `tread_fi`) |
-| `strategy.timeframe` | 取引の時間足（デフォルト: `15m`） |
-| `strategy.paper_mode` | `true` でデモトレード、`false` で実弾トレード |
-| `ai.api_keys` | Gemini APIキーのリスト（ローテーション用） |
-| `discord.bot_token` | Discord Bot Token |
-| `discord.channels` | `trade_alerts` (売買), `wallet_updates` (残高) のID |
+### Recommended Setup (Hyperliquid Copy Trading)
 
-## 🔑 APIキーの取得方法
+```yaml
+active_exchange: "hyperliquid"
 
-### 1. Google Gemini
-1. [Google AI Studio](https://aistudio.google.com/) にアクセスします。
-2. **Get API key** をクリックします。
-3. **Create API key** でキーを発行し、`config.yaml` の `ai.api_keys` に追加します。
+exchanges:
+  hyperliquid:
+    wallet_address: "YOUR_WALLET_ADDRESS"
+    private_key: "YOUR_PRIVATE_KEY" # Leave empty for Paper Mode
+    testnet: false
 
-### 2. Hyperliquid (Trade.xyz)
-**Paper Mode (デモ) の場合、APIキーは不要です。**
-実弾トレードを行う場合のみ、以下の手順が必要です：
-1. [Hyperliquid](https://app.hyperliquid.xyz/) にウォレットを接続します。
-2. **API** セクションで **API Wallet** を作成します。
-3. **Wallet Address** と **Private Key** を `config.yaml` の `hyperliquid` セクションに設定します。
+strategy:
+  type: "copy_leaderboard" # Enable Copy Trading
+  copy_trading:
+    leaderboard_limit: 5      # Copy top 5 traders
+    target_coins: []          # Empty = Copy all coins they trade
+    max_quantity: 500         # Max trade size in JPY per order
+    allow_short: true         # Enable shorting (Recommended)
+  
+  paper_mode:
+    enabled: true             # Set to false for Real Trading
+```
 
-### 3. Binance Japan (binance_japan)
-1. [Binance Japan](https://www.binance.com/ja) にログインします。
-2. **API管理** からAPIキーを作成します。
-3. **API Key** と **Secret Key** を `config.yaml` の `binance_japan` セクションに設定します。
+## 🖥️ Usage
 
-## ⚠️ 免責事項
+Run `run_bot.bat` to start the bot.
+The bot runs in **Console Mode** and sends all updates to your configured Discord channels.
 
-このソフトウェアは実験的なものであり、実際の取引に使用する場合は自己責任で行ってください。
-開発者は、このボットの使用によって生じた損失について一切の責任を負いません。
-まずは **Paper Mode (デモトレード)** で十分に検証することをお勧めします。
+### Commands
+*   `Ctrl+C`: Stop the bot safely.
+
+## ⚠️ Risk Warning
+
+*   **Cryptocurrency trading involves significant risk.**
+*   **Copy Trading** does not guarantee profits. Top traders can lose money.
+*   **Paper Mode** is recommended for testing strategies before risking real funds.
+*   Use this software at your own risk. The developers are not responsible for any financial losses.
+
+## 📝 License
+
+MIT License
