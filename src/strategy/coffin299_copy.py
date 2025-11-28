@@ -91,11 +91,58 @@ class Coffin299CopyStrategy:
         self.last_leaderboard_update = datetime.utcnow()
 
     async def execute_copy_trade(self, symbol, side, reason):
-        # Check if we already have this position
-        # This requires position management logic similar to main strategy
-        # For now, just notify/log
-        
         pair = f"{symbol}/USDC"
+        
+        # 1. Safety Margin Check
+        safety_buffer_pct = self.config['strategy'].get('copy_trading', {}).get('safety_margin_buffer', 0.0)
+        
+        if safety_buffer_pct > 0:
+            balance = await self.exchange.get_balance()
+            # Hyperliquid balance structure: {'total': {'USDC': ...}, 'free': {'USDC': ...}}
+            total_equity = float(balance.get('total', {}).get('USDC', 0))
+            free_margin = float(balance.get('free', {}).get('USDC', 0))
+            
+            safety_threshold = total_equity * safety_buffer_pct
+            
+            is_low_balance = free_margin < safety_threshold
+            
+            if is_low_balance:
+                # Only allow trades that REDUCE risk (Close positions)
+                # We need to know if we have a position in this symbol
+                current_positions = await self.exchange.get_positions()
+                # Find position for this symbol
+                my_pos = next((p for p in current_positions if p['symbol'] == symbol), None)
+                
+                if not my_pos:
+                    # No position, so this would be an OPEN trade. REJECT.
+                    logger.warning(f"Low Balance ({free_margin:.2f} < {safety_threshold:.2f}). Skipping OPEN trade for {pair}.")
+                    return
+                
+                # If we have a position, check if this trade closes it.
+                # LONG signal -> Closes SHORT
+                # SHORT signal -> Closes LONG
+                
+                is_closing = (side == 'LONG' and my_pos['side'] == 'SHORT') or \
+                             (side == 'SELL' and my_pos['side'] == 'LONG') # side is BUY/SELL in execute_copy_trade call?
+                             
+                # Wait, execute_copy_trade receives 'BUY' or 'SELL' (from run_cycle)
+                # run_cycle logic:
+                # if longs > shorts: BUY
+                # if shorts > longs: SELL
+                
+                # So:
+                # BUY -> Long (Open Long or Close Short)
+                # SELL -> Short (Open Short or Close Long)
+                
+                is_closing = (side == 'BUY' and my_pos['side'] == 'SHORT') or \
+                             (side == 'SELL' and my_pos['side'] == 'LONG')
+
+                if not is_closing:
+                    logger.warning(f"Low Balance. Skipping trade that increases risk for {pair}.")
+                    return
+                else:
+                    logger.info(f"Low Balance. Allowing CLOSING trade for {pair}.")
+
         price = await self.exchange.get_market_price(pair)
         
         # Mock execution for now (or call real execute if safe)
