@@ -149,8 +149,9 @@ class Coffin299Strategy:
             logger.error("Failed to fetch historical data. Aborting training.")
             return
 
-        # 2. Train Model
-        success = self.learner.train(historical_data)
+        # 2. Train Model (Run in thread pool to avoid blocking N100)
+        loop = asyncio.get_running_loop()
+        success = await loop.run_in_executor(None, self.learner.train, historical_data)
         
         if success:
             logger.info("Model training completed successfully.")
