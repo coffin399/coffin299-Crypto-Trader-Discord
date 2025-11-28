@@ -109,9 +109,48 @@ class Coffin299Strategy:
                          
                          total_balance_jpy += asset_val_in_quote * jpy_rate
                          changes[asset] = f"{amount:.4f}"
+            
+            # Get positions and calculate PnL
+            total_pnl_usd = 0.0
+            positions = []
+            if hasattr(self.exchange, 'get_positions'):
+                try:
+                    positions = await self.exchange.get_positions()
+                    for p in positions:
+                        pnl = p.get('pnl', 0)
+                        total_pnl_usd += pnl
+                        
+                        # Add position summary to changes dict
+                        val = p.get('value', 0)
+                        size_str = f"{p['size']:.4f}".rstrip('0').rstrip('.')
+                        changes[p['symbol']] = f"{size_str} (${val:.2f})"
+                except Exception as e:
+                    logger.warning(f"Failed to get positions for PnL: {e}")
+            
+            # Convert PnL to JPY (assuming USD-based exchange)
+            # For Hyperliquid/similar, use USD/JPY rate
+            try:
+                import aiohttp
+                async with aiohttp.ClientSession() as session:
+                    async with session.get("https://api.exchangerate-api.com/v4/latest/USD") as resp:
+                        if resp.status == 200:
+                            data = await resp.json()
+                            usd_jpy_rate = float(data.get('rates', {}).get('JPY', 150.0))
+                        else:
+                            usd_jpy_rate = 150.0
+            except:
+                usd_jpy_rate = 150.0
+            
+            total_pnl_jpy = total_pnl_usd * usd_jpy_rate
 
-            await self.notifier.notify_balance(total_balance_jpy, "JPY", changes)
-            logger.info(f"Hourly Report Sent. Total Est: {total_balance_jpy} JPY")
+            await self.notifier.notify_balance(
+                total_balance_jpy, 
+                "JPY", 
+                changes,
+                total_pnl_usd=total_pnl_usd,
+                total_pnl_jpy=total_pnl_jpy
+            )
+            logger.info(f"Hourly Report Sent. Total: ¥{total_balance_jpy:.0f}, PnL: ${total_pnl_usd:.2f}")
 
         except Exception as e:
             logger.error(f"Failed to send hourly report: {e}")

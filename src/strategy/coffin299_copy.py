@@ -341,34 +341,60 @@ class Coffin299CopyStrategy:
 
     async def send_report(self):
         try:
+            logger.info("🔵 Generating periodic report...")
+            
+            # Get balance
             balance = await self.exchange.get_balance()
+            if not balance:
+                logger.error("🔴 Failed to get balance - balance is empty")
+                return
+                
             total_usd = float(balance.get('total', {}).get('USDC', 0))
             total_jpy = total_usd * self.jpy_rate
             
+            logger.info(f"Balance: ${total_usd:.2f} (¥{total_jpy:.0f})")
+            
+            # Get positions
             positions = await self.exchange.get_positions()
+            if positions is None:
+                logger.warning("🟡 get_positions returned None, using empty list")
+                positions = []
+            
             pos_summary = {}
             total_pnl_usd = 0.0
             
             for p in positions:
-                # Show Value if available, otherwise PnL
-                val = p.get('value', 0)
-                pnl = p.get('pnl', 0)
-                total_pnl_usd += pnl
-                
-                # Format: Size ($Value)
-                # Round size to 4 decimals, Value to 2 decimals
-                size_str = f"{p['size']:.4f}".rstrip('0').rstrip('.')
-                pos_summary[p['symbol']] = f"{size_str} (${val:.2f})"
+                try:
+                    # Show Value if available, otherwise PnL
+                    val = p.get('value', 0)
+                    pnl = p.get('pnl', 0)
+                    total_pnl_usd += pnl
+                    
+                    # Format: Size ($Value)
+                    # Round size to 4 decimals, Value to 2 decimals
+                    size_str = f"{p['size']:.4f}".rstrip('0').rstrip('.')
+                    pos_summary[p['symbol']] = f"{size_str} (${val:.2f})"
+                except Exception as e:
+                    logger.error(f"🔴 Error processing position {p}: {e}")
+                    continue
             
             total_pnl_jpy = total_pnl_usd * self.jpy_rate
             
-            await self.notifier.notify_balance(
-                total_jpy, 
-                currency="JPY", 
-                changes=pos_summary,
-                total_pnl_usd=total_pnl_usd,
-                total_pnl_jpy=total_pnl_jpy
-            )
-            logger.info(f"Sent Periodic Report. Total: ${total_usd:.2f} (¥{total_jpy:.0f}), PnL: ${total_pnl_usd:.2f}")
+            logger.info(f"PnL: ${total_pnl_usd:.2f} (¥{total_pnl_jpy:.0f}), Positions: {len(positions)}")
+            
+            # Send notification
+            try:
+                await self.notifier.notify_balance(
+                    total_jpy, 
+                    currency="JPY", 
+                    changes=pos_summary,
+                    total_pnl_usd=total_pnl_usd,
+                    total_pnl_jpy=total_pnl_jpy
+                )
+                logger.info(f"🟢 Sent Periodic Report. Total: ${total_usd:.2f} (¥{total_jpy:.0f}), PnL: ${total_pnl_usd:.2f}")
+            except Exception as e:
+                logger.error(f"🔴 Failed to send balance notification: {e}")
+                
         except Exception as e:
-            logger.error(f"Error in periodic report: {e}")
+            logger.error(f"🔴 Error in periodic report: {e}", exc_info=True)
+
