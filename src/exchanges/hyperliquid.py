@@ -11,9 +11,11 @@ logger = setup_logger("hyperliquid")
 class Hyperliquid(BaseExchange):
     def __init__(self, config):
         super().__init__(config)
-        self.wallet_address = config.get('exchanges', {}).get('trade_xyz', {}).get('wallet_address')
-        self.private_key = config.get('exchanges', {}).get('trade_xyz', {}).get('private_key')
-        self.testnet = config.get('exchanges', {}).get('trade_xyz', {}).get('testnet', False)
+        # Fix: Read from 'hyperliquid' section, not 'trade_xyz'
+        hl_config = config.get('exchanges', {}).get('hyperliquid', {})
+        self.wallet_address = hl_config.get('wallet_address')
+        self.private_key = hl_config.get('private_key')
+        self.testnet = hl_config.get('testnet', False)
         
         self.base_url = constants.TESTNET_API_URL if self.testnet else constants.MAINNET_API_URL
         
