@@ -138,7 +138,7 @@ class DiscordNotifier:
         # Add to buffer
         self.notification_buffer.append(embed)
 
-    async def notify_balance(self, total_balance, currency="JPY", changes=None):
+    async def notify_balance(self, total_balance, currency="JPY", changes=None, total_pnl_usd=None, total_pnl_jpy=None):
         """
         Sends wallet updates to the 'wallet_updates' channel.
         """
@@ -147,10 +147,16 @@ class DiscordNotifier:
             for coin, amount in changes.items():
                 fields.append({"name": coin, "value": f"{amount}", "inline": True})
         
+        description = f"Total Balance: **{total_balance:,.2f} {currency}**"
+        
+        if total_pnl_usd is not None and total_pnl_jpy is not None:
+            pnl_color = "🟢" if total_pnl_usd >= 0 else "🔴"
+            description += f"\nTotal PnL: {pnl_color} **${total_pnl_usd:,.2f}** (¥{total_pnl_jpy:,.0f})"
+            
         await self.send_embed(
             channel_key='wallet_updates',
             title="💰 Wallet Update",
-            description=f"Total Balance: **{total_balance:,.2f} {currency}**",
+            description=description,
             color=0x3498db,
             fields=fields
         )

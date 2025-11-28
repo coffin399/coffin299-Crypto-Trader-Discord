@@ -236,7 +236,8 @@ class Coffin299CopyStrategy:
         logger.info("Starting Periodic Report Task (Every 30 mins)...")
         
         # Initial Report
-        await asyncio.sleep(5) # Wait a bit for startup
+        # Wait 10s to ensure WS prices are populated for accurate PnL
+        await asyncio.sleep(10) 
         await self.send_report()
         
         while True:
@@ -252,14 +253,26 @@ class Coffin299CopyStrategy:
             
             positions = await self.exchange.get_positions()
             pos_summary = {}
+            total_pnl_usd = 0.0
+            
             for p in positions:
                 # Show Value if available, otherwise PnL
                 val = p.get('value', 0)
                 pnl = p.get('pnl', 0)
+                total_pnl_usd += pnl
+                
                 # Format: Size ($Value)
                 pos_summary[p['symbol']] = f"{p['size']} (${val:.2f})"
             
-            await self.notifier.notify_balance(total_jpy, currency="JPY", changes=pos_summary)
-            logger.info(f"Sent Periodic Report. Total: ${total_usd:.2f} (¥{total_jpy:.0f})")
+            total_pnl_jpy = total_pnl_usd * self.jpy_rate
+            
+            await self.notifier.notify_balance(
+                total_jpy, 
+                currency="JPY", 
+                changes=pos_summary,
+                total_pnl_usd=total_pnl_usd,
+                total_pnl_jpy=total_pnl_jpy
+            )
+            logger.info(f"Sent Periodic Report. Total: ${total_usd:.2f} (¥{total_jpy:.0f}), PnL: ${total_pnl_usd:.2f}")
         except Exception as e:
             logger.error(f"Error in periodic report: {e}")
