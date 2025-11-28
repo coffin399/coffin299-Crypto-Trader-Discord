@@ -47,35 +47,56 @@ class BaseExchange(ABC):
         cost = amount * price
         
         if side == 'buy':
-            if self.paper_balance.get(quote, 0) >= cost:
-                self.paper_balance[quote] -= cost
-                self.paper_balance[base] = self.paper_balance.get(base, 0) + amount
-                
-                # Track position
+            # Futures Buy: Increases position size (Long) or Decreases Short
+            # Cost is margin, but for simple paper mode we just track PnL or assume sufficient margin if balance > 0
+            
+            # Simplified: Just check if we have some quote currency (USDC)
+            if self.paper_balance.get(quote, 0) > 0:
+                # Update position
                 current_pos = self.positions.get(pair, {'amount': 0, 'entry_price': 0})
-                total_amt = current_pos['amount'] + amount
-                avg_price = ((current_pos['amount'] * current_pos['entry_price']) + cost) / total_amt
-                self.positions[pair] = {'amount': total_amt, 'entry_price': avg_price}
+                old_amt = current_pos['amount']
+                new_amt = old_amt + amount
+                
+                # Calculate new entry price if increasing position
+                if old_amt >= 0:
+                    cost = amount * price
+                    total_cost = (old_amt * current_pos['entry_price']) + cost
+                    avg_price = total_cost / new_amt if new_amt != 0 else 0
+                    self.positions[pair] = {'amount': new_amt, 'entry_price': avg_price}
+                else:
+                    # Closing short
+                    # Realized PnL logic would go here
+                    self.positions[pair]['amount'] = new_amt
+                    if new_amt == 0:
+                        del self.positions[pair]
                 
                 return {'id': f'paper_{int(time.time())}', 'status': 'closed', 'filled': amount, 'price': price}
             else:
-                logger.warning("Paper Mode: Insufficient funds")
+                logger.warning("Paper Mode: Insufficient funds (Balance <= 0)")
                 return None
                 
         elif side == 'sell':
-            if self.paper_balance.get(base, 0) >= amount:
-                self.paper_balance[base] -= amount
-                self.paper_balance[quote] = self.paper_balance.get(quote, 0) + cost
-                
+            # Futures Sell: Decreases Long or Increases Short (Negative amount)
+            
+            if self.paper_balance.get(quote, 0) > 0:
                 # Update position
                 current_pos = self.positions.get(pair, {'amount': 0, 'entry_price': 0})
-                new_amt = current_pos['amount'] - amount
-                if new_amt <= 0:
-                    if pair in self.positions: del self.positions[pair]
+                old_amt = current_pos['amount']
+                new_amt = old_amt - amount
+                
+                # Calculate new entry price if increasing short (becoming more negative)
+                if old_amt <= 0:
+                    cost = amount * price
+                    total_cost = (abs(old_amt) * current_pos['entry_price']) + cost
+                    avg_price = total_cost / abs(new_amt) if new_amt != 0 else 0
+                    self.positions[pair] = {'amount': new_amt, 'entry_price': avg_price}
                 else:
+                    # Closing long
                     self.positions[pair]['amount'] = new_amt
+                    if new_amt == 0:
+                        del self.positions[pair]
                     
                 return {'id': f'paper_{int(time.time())}', 'status': 'closed', 'filled': amount, 'price': price}
             else:
-                logger.warning("Paper Mode: Insufficient asset")
+                logger.warning("Paper Mode: Insufficient funds (Balance <= 0)")
                 return None
