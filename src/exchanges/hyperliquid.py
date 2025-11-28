@@ -20,11 +20,18 @@ class Hyperliquid(BaseExchange):
         self.info = Info(self.base_url, skip_ws=True)
         
         if self.private_key:
-            self.account = eth_account.Account.from_key(self.private_key)
-            self.exchange = Exchange(self.account, self.base_url, account_address=self.wallet_address)
+            try:
+                self.account = eth_account.Account.from_key(self.private_key)
+                self.exchange = Exchange(self.account, self.base_url, account_address=self.wallet_address)
+            except Exception as e:
+                logger.error(f"Failed to init Hyperliquid Exchange: {e}")
+                self.exchange = None
         else:
             self.exchange = None
-            logger.warning("Hyperliquid Private Key not provided. Trading disabled.")
+            if not self.paper_mode:
+                logger.warning("Hyperliquid Private Key not provided. Trading disabled (unless in Paper Mode).")
+            else:
+                logger.info("Hyperliquid initialized in Paper Mode (No Private Key). Public data only.")
 
     async def get_balance(self):
         if self.paper_mode:

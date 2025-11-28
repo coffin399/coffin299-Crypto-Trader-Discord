@@ -38,7 +38,7 @@ exchanges:
 
   hyperliquid:
     wallet_address: "YOUR_WALLET_ADDRESS"
-    private_key: "YOUR_PRIVATE_KEY"
+    private_key: "YOUR_PRIVATE_KEY" # Optional for Paper Mode
     testnet: true
 
   tread_fi:
