@@ -169,37 +169,6 @@ class Coffin299CopyStrategy:
 
         if not price or price <= 0:
             price = await self.exchange.get_market_price(pair)
-            
-        if not price or price <= 0:
-            logger.error(f"Cannot execute trade for {pair}: Invalid Price {price}")
-            return
-        
-        logger.info(f"EXECUTING COPY TRADE: {side} {pair} @ {price} ({reason})")
-        
-        order_side = side.lower()
-        
-        # Calculate Amount based on max_quantity (JPY)
-        max_quantity_jpy = self.config['strategy'].get('copy_trading', {}).get('max_quantity', 1500) # Default 1500 JPY (~$10)
-        
-        # 1. Convert JPY to USD
-        usd_value = max_quantity_jpy / self.jpy_rate
-        
-        # 2. Convert USD to Token Amount
-        # Amount = USD / Price
-        amount = usd_value / price
-        
-        # Rounding
-        amount = round(amount, 6)
-        
-        if amount <= 0:
-            logger.warning(f"Calculated amount is too small: {amount} (JPY: {max_quantity_jpy}, Price: {price})")
-            return
-        
-        try:
-            order = await self.exchange.create_order(pair, 'market', order_side, amount)
-            if order:
-                logger.info(f"Trade Executed: {order}")
-                
                 # Calculate JPY Value (Actual)
                 total_jpy = amount * price * self.jpy_rate
                 

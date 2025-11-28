@@ -41,11 +41,12 @@ def setup_logger(name="coffin299", log_level="INFO"):
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
         
-    file_handler = RotatingFileHandler(
+    # Use standard FileHandler instead of RotatingFileHandler to avoid Windows permission errors
+    # during rotation while the file is open.
+    file_handler = logging.FileHandler(
         os.path.join(log_dir, "bot.log"),
-        maxBytes=10*1024*1024,  # 10MB
-        backupCount=5,
-        encoding='utf-8'
+        encoding='utf-8',
+        mode='a'
     )
     file_handler.setFormatter(formatter)
     file_handler.setFormatter(formatter)
