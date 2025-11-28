@@ -1,6 +1,6 @@
 import discord
 import asyncio
-from datetime import datetime
+from datetime import datetime, timedelta
 from ..logger import setup_logger
 
 logger = setup_logger("discord_bot")
@@ -63,13 +63,16 @@ class DiscordNotifier:
         channel = await self._get_channel(channel_key)
         if not channel: return
 
+        # Use JST for display
+        jst = datetime.utcnow() + timedelta(hours=9)
+        
         embed = discord.Embed(
             title=title,
             description=description,
             color=color,
-            timestamp=datetime.utcnow()
+            timestamp=datetime.utcnow() # Discord uses this to show "Today at X:XX PM" in user's local time
         )
-        embed.set_footer(text="Coffin299 Trader")
+        embed.set_footer(text=f"Coffin299 Trader | {jst.strftime('%Y-%m-%d %H:%M:%S')} JST")
         
         if fields:
             for field in fields:
