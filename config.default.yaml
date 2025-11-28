@@ -53,8 +53,15 @@ strategy:
   type: "coffin299" # Options: "coffin299", "copy_leaderboard"
   timeframe: "15m"
   leverage: 1  # Leverage multiplier default:5
-  max_open_positions: 3
+  max_open_positions: 10
   
+  # Copy Trading Settings
+  copy_trading:
+    leaderboard_limit: 5
+    fallback_addresses: 
+      - "0x..." # Add addresses here if API fails
+      - "0x..."
+
   # Paper Mode Settings
   paper_mode:
     enabled: true

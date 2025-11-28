@@ -70,12 +70,20 @@ class Coffin299CopyStrategy:
 
     async def update_leaderboard(self):
         logger.info("Updating Leaderboard...")
+        
+        # Try API
         if hasattr(self.exchange, 'get_leaderboard_top_traders'):
-            self.top_traders = await self.exchange.get_leaderboard_top_traders(limit=5)
-            logger.info(f"Top Traders: {self.top_traders}")
-            self.last_leaderboard_update = datetime.utcnow()
-        else:
-            logger.error("Exchange does not support leaderboard fetching.")
+            self.top_traders = await self.exchange.get_leaderboard_top_traders(limit=self.config['strategy'].get('copy_trading', {}).get('leaderboard_limit', 5))
+            
+        # Fallback if empty
+        if not self.top_traders:
+            logger.warning("API Leaderboard fetch failed or empty. Using fallback addresses from config.")
+            fallback = self.config['strategy'].get('copy_trading', {}).get('fallback_addresses', [])
+            # Filter out placeholders
+            self.top_traders = [addr for addr in fallback if addr and "0x..." not in addr]
+            
+        logger.info(f"Top Traders to Copy: {self.top_traders}")
+        self.last_leaderboard_update = datetime.utcnow()
 
     async def execute_copy_trade(self, symbol, side, reason):
         # Check if we already have this position
