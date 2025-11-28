@@ -13,3 +13,4 @@ discord.py
 jinja2
 hyperliquid-python-sdk
 eth-account
+scikit-learn
