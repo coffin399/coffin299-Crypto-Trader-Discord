@@ -51,7 +51,7 @@ class Coffin299CopyStrategy:
                 
                 aggregate_positions[symbol][side] += 1
                 
-            await asyncio.sleep(2.0) # Delay to avoid rate limits
+            await asyncio.sleep(0.5) # Reduced delay as we are more efficient now
             
         # 3. Decide & Execute
         target_coins = self.config['strategy'].get('copy_trading', {}).get('target_coins', [])

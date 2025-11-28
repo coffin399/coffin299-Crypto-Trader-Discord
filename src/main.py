@@ -25,6 +25,7 @@ async def main_loop(strategy):
             logger.error(f"Error in strategy cycle: {e}")
         
         # Sleep for 60 seconds (loop interval)
+        logger.info("Cycle finished. Waiting 60s...")
         await asyncio.sleep(60) 
 
 async def start_bot():
