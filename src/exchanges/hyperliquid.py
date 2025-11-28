@@ -96,13 +96,24 @@ class Hyperliquid(BaseExchange):
             # Expected: [{'symbol': 'ETH', 'size': 1.0, 'entry_price': 3000, 'pnl': 50, 'side': 'LONG'}]
             
             formatted_positions = []
+            
+            # Fetch all prices once to avoid rate limits
+            all_prices = await self.get_all_prices()
+            
             for pair, pos in self.positions.items():
                 symbol = pair.split('/')[0]
                 size = pos['amount']
                 if size == 0: continue
                 
                 # Calculate PnL roughly
-                current_price = await self.get_market_price(pair)
+                current_price = all_prices.get(symbol, 0)
+                if current_price == 0:
+                     # Fallback if missing in bulk fetch (rare)
+                     try:
+                        current_price = await self.get_market_price(pair)
+                     except:
+                        current_price = pos['entry_price'] # Fallback to entry price (0 PnL)
+
                 entry_price = pos['entry_price']
                 pnl = (current_price - entry_price) * size # Simple spot PnL
                 
