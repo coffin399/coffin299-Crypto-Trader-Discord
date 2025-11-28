@@ -144,37 +144,6 @@ class Coffin299CopyStrategy:
         # 2. Max Open Positions Check
         max_positions = self.config['strategy'].get('max_open_positions', 0)
         allow_short = self.config['strategy'].get('copy_trading', {}).get('allow_short', True)
-
-        current_positions = await self.exchange.get_positions()
-        my_pos = next((p for p in current_positions if p['symbol'] == symbol), None)
-
-        # Logic for SELL (Shorting vs Closing)
-        if side == "SELL":
-            # If we have a LONG position, this SELL is a CLOSE/REDUCE -> Always Allowed
-            if my_pos and my_pos['side'] == 'LONG' and my_pos['size'] > 0:
-                pass # Allowed (Closing Long)
-            
-            # If we have NO position or a SHORT position, this SELL is a NEW SHORT or ADDING SHORT
-            else:
-                if not allow_short:
-                    logger.info(f"Skipping SELL (Short) for {pair} because allow_short is False.")
-                    return
-
-        if max_positions > 0:
-            # If we don't have a position, this is a new OPEN trade
-            if not my_pos:
-                if len(current_positions) >= max_positions:
-                    logger.warning(f"Max Open Positions Reached ({len(current_positions)}/{max_positions}). Skipping OPEN trade for {pair}.")
-                    return
-
-        if not price or price <= 0:
-            price = await self.exchange.get_market_price(pair)
-                # Calculate JPY Value (Actual)
-                total_jpy = amount * price * self.jpy_rate
-                
-                await self.notifier.notify_trade(side, pair, price, str(amount), reason, total_jpy=total_jpy)
-            else:
-                logger.error("Trade Execution Failed")
         except Exception as e:
             logger.error(f"Trade Execution Error: {e}")
 
@@ -231,7 +200,9 @@ class Coffin299CopyStrategy:
                 total_pnl_usd += pnl
                 
                 # Format: Size ($Value)
-                pos_summary[p['symbol']] = f"{p['size']} (${val:.2f})"
+                # Round size to 4 decimals, Value to 2 decimals
+                size_str = f"{p['size']:.4f}".rstrip('0').rstrip('.')
+                pos_summary[p['symbol']] = f"{size_str} (${val:.2f})"
             
             total_pnl_jpy = total_pnl_usd * self.jpy_rate
             
