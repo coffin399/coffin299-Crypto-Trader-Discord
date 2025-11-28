@@ -27,12 +27,14 @@ class Coffin299CopyStrategy:
         """
         Main copy strategy cycle.
         """
+        logger.info("--- Strategy Cycle Start ---")
+        
         # 1. Update Leaderboard (every 1 hour)
         if datetime.utcnow() - self.last_leaderboard_update > timedelta(hours=1):
             await self.update_leaderboard()
             
         if not self.top_traders:
-            logger.warning("No top traders found to copy.")
+            logger.warning("No top traders found to copy. Waiting...")
             return
 
         # 2. Analyze Top Traders' Positions
@@ -72,6 +74,111 @@ class Coffin299CopyStrategy:
             if total >= min_concurrence: 
                 logger.info(f"Copy Signal for {symbol}: {longs} LONG vs {shorts} SHORT (Total: {total})")
                 
+                # Get price from cache or fetch if missing
+                current_price = all_prices.get(symbol)
+                
+                # Simple Majority Vote
+                if longs > shorts:
+                    # BUY
+                    await self.execute_copy_trade(symbol, "BUY", f"Copying {longs}/{total} top traders", price=current_price)
+                elif shorts > longs:
+                    # SELL
+                    await self.execute_copy_trade(symbol, "SELL", f"Copying {shorts}/{total} top traders", price=current_price)
+            
+            # Sleep slightly even with bulk fetch to be safe
+            await asyncio.sleep(0.1)
+
+    async def update_leaderboard(self):
+        logger.info("Updating Leaderboard...")
+        
+        new_traders = []
+        # Try API
+        if hasattr(self.exchange, 'get_leaderboard_top_traders'):
+            new_traders = await self.exchange.get_leaderboard_top_traders(limit=self.config['strategy'].get('copy_trading', {}).get('leaderboard_limit', 5))
+            
+        if new_traders:
+            self.top_traders = new_traders
+            logger.info(f"Leaderboard Updated: {self.top_traders}")
+        elif not self.top_traders:
+            # Only use fallback if we have NO traders at all (first run or cleared)
+            logger.warning("API Leaderboard fetch failed. Using fallback addresses.")
+            fallback = self.config['strategy'].get('copy_trading', {}).get('fallback_addresses', [])
+            self.top_traders = [addr for addr in fallback if addr and "0x..." not in addr]
+        else:
+             logger.warning("Leaderboard update failed, keeping previous traders.")
+             
+        self.last_leaderboard_update = datetime.utcnow()
+
+    async def execute_copy_trade(self, symbol, side, reason, price=None):
+        pair = f"{symbol}/USDC"
+        
+        # 1. Safety Margin Check
+        safety_buffer_pct = self.config['strategy'].get('copy_trading', {}).get('safety_margin_buffer', 0.0)
+        
+        if safety_buffer_pct > 0:
+            balance = await self.exchange.get_balance()
+            total_equity = float(balance.get('total', {}).get('USDC', 0))
+            free_margin = float(balance.get('free', {}).get('USDC', 0))
+            
+            safety_threshold = total_equity * safety_buffer_pct
+            
+            is_low_balance = free_margin < safety_threshold
+            
+            if is_low_balance:
+                current_positions = await self.exchange.get_positions()
+                my_pos = next((p for p in current_positions if p['symbol'] == symbol), None)
+                
+                if not my_pos:
+                    logger.warning(f"Low Balance ({free_margin:.2f} < {safety_threshold:.2f}). Skipping OPEN trade for {pair}.")
+                    return
+                
+                is_closing = (side == 'BUY' and my_pos['side'] == 'SHORT') or \
+                             (side == 'SELL' and my_pos['side'] == 'LONG')
+
+                if not is_closing:
+                    logger.warning(f"Low Balance. Skipping trade that increases risk for {pair}.")
+                    return
+                else:
+                    logger.info(f"Low Balance. Allowing CLOSING trade for {pair}.")
+
+        # 2. Max Open Positions Check
+        max_positions = self.config['strategy'].get('max_open_positions', 0)
+        allow_short = self.config['strategy'].get('copy_trading', {}).get('allow_short', True)
+
+        current_positions = await self.exchange.get_positions()
+        my_pos = next((p for p in current_positions if p['symbol'] == symbol), None)
+
+        # Logic for SELL (Shorting vs Closing)
+        if side == "SELL":
+            # If we have a LONG position, this SELL is a CLOSE/REDUCE -> Always Allowed
+            if my_pos and my_pos['side'] == 'LONG' and my_pos['size'] > 0:
+                pass # Allowed (Closing Long)
+            
+            # If we have NO position or a SHORT position, this SELL is a NEW SHORT or ADDING SHORT
+            else:
+                if not allow_short:
+                    logger.info(f"Skipping SELL (Short) for {pair} because allow_short is False.")
+                    return
+
+        if max_positions > 0:
+            # If we don't have a position, this is a new OPEN trade
+            if not my_pos:
+                if len(current_positions) >= max_positions:
+                    logger.warning(f"Max Open Positions Reached ({len(current_positions)}/{max_positions}). Skipping OPEN trade for {pair}.")
+                    return
+
+        if not price or price <= 0:
+            price = await self.exchange.get_market_price(pair)
+            
+        if not price or price <= 0:
+            logger.error(f"Cannot execute trade for {pair}: Invalid Price {price}")
+            return
+        
+        logger.info(f"EXECUTING COPY TRADE: {side} {pair} @ {price} ({reason})")
+        
+        order_side = side.lower()
+        
+        # Calculate Amount based on max_quantity (JPY)
         max_quantity_jpy = self.config['strategy'].get('copy_trading', {}).get('max_quantity', 1500) # Default 1500 JPY (~$10)
         
         # 1. Convert JPY to USD
@@ -81,9 +188,7 @@ class Coffin299CopyStrategy:
         # Amount = USD / Price
         amount = usd_value / price
         
-        # Rounding (Hyperliquid usually takes 4-5 decimals, let's safe round to 4 significant digits or fixed decimals)
-        # For safety/simplicity, let's use 6 decimals for now to support small amounts (e.g. 500 JPY on BTC)
-        # Ideally we should check lot size rules from exchange info.
+        # Rounding
         amount = round(amount, 6)
         
         if amount <= 0:
