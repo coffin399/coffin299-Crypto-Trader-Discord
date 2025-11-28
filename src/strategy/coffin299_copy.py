@@ -52,6 +52,9 @@ class Coffin299CopyStrategy:
         # Logic: If > 50% of top traders are LONG on a coin, we LONG.
         
         target_coins = self.config['strategy'].get('copy_trading', {}).get('target_coins', [])
+        min_concurrence = self.config['strategy'].get('copy_trading', {}).get('min_concurrence', 1)
+        
+        logger.info(f"Aggregated Positions: {aggregate_positions}")
         
         for symbol, counts in aggregate_positions.items():
             # Filter by target coins if specified
@@ -62,8 +65,8 @@ class Coffin299CopyStrategy:
             shorts = counts['SHORT']
             total = longs + shorts
             
-            if total >= 2: # At least 2 traders in this coin
-                logger.info(f"Copy Signal for {symbol}: {longs} LONG vs {shorts} SHORT")
+            if total >= min_concurrence: 
+                logger.info(f"Copy Signal for {symbol}: {longs} LONG vs {shorts} SHORT (Total: {total})")
                 
                 # Simple Majority Vote
                 if longs > shorts:
@@ -149,8 +152,20 @@ class Coffin299CopyStrategy:
         # To be safe, we just log/notify in this first version
         logger.info(f"EXECUTING COPY TRADE: {side} {pair} @ {price} ({reason})")
         
-        # Notify
-        await self.notifier.notify_trade(side, pair, price, "0.001", reason + " (Simulation)")
+        # Real execution
+        # side is BUY/SELL. create_order expects 'buy'/'sell' (lowercase usually, but let's check BaseExchange)
+        # BaseExchange checks 'buy'/'sell'.
         
-        # Real execution would go here:
-        # await self.exchange.create_order(...)
+        order_side = side.lower()
+        amount = 0.01 # Fixed small amount for testing/safety. TODO: Calculate based on balance/risk.
+        
+        # For paper mode, we want to see positions.
+        try:
+            order = await self.exchange.create_order(pair, 'market', order_side, amount)
+            if order:
+                logger.info(f"Trade Executed: {order}")
+                await self.notifier.notify_trade(side, pair, price, str(amount), reason)
+            else:
+                logger.error("Trade Execution Failed")
+        except Exception as e:
+            logger.error(f"Trade Execution Error: {e}")

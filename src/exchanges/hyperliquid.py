@@ -64,8 +64,29 @@ class Hyperliquid(BaseExchange):
         Format: [{'symbol': 'ETH', 'size': 1.0, 'entry_price': 3000, 'pnl': 50, 'side': 'LONG'}]
         """
         if self.paper_mode:
-            # TODO: Implement paper positions tracking
-            return []
+            # Convert BaseExchange positions dict to list format
+            # BaseExchange: {pair: {amount: float, entry_price: float}}
+            # Expected: [{'symbol': 'ETH', 'size': 1.0, 'entry_price': 3000, 'pnl': 50, 'side': 'LONG'}]
+            
+            formatted_positions = []
+            for pair, pos in self.positions.items():
+                symbol = pair.split('/')[0]
+                size = pos['amount']
+                if size == 0: continue
+                
+                # Calculate PnL roughly
+                current_price = await self.get_market_price(pair)
+                entry_price = pos['entry_price']
+                pnl = (current_price - entry_price) * size # Simple spot PnL
+                
+                formatted_positions.append({
+                    'symbol': symbol,
+                    'size': size,
+                    'side': 'LONG', # BaseExchange paper logic is spot-like (LONG only)
+                    'entry_price': entry_price,
+                    'pnl': pnl
+                })
+            return formatted_positions
             
         try:
             user_state = self.info.user_state(self.wallet_address)
