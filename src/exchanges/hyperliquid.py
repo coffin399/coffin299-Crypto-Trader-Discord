@@ -19,8 +19,25 @@ class Hyperliquid(BaseExchange):
         
         self.base_url = constants.TESTNET_API_URL if self.testnet else constants.MAINNET_API_URL
         
-        # Initialize SDK components
-        self.info = Info(self.base_url, skip_ws=True)
+        # Initialize SDK components with retry logic
+        max_retries = 3
+        retry_delay = 2  # seconds
+        
+        for attempt in range(max_retries):
+            try:
+                self.info = Info(self.base_url, skip_ws=True)
+                logger.info(f"Successfully connected to Hyperliquid API")
+                break
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    logger.warning(f"Failed to connect to Hyperliquid API (attempt {attempt + 1}/{max_retries}): {e}")
+                    logger.info(f"Retrying in {retry_delay} seconds...")
+                    import time
+                    time.sleep(retry_delay)
+                    retry_delay *= 2  # Exponential backoff
+                else:
+                    logger.error(f"Failed to connect to Hyperliquid API after {max_retries} attempts: {e}")
+                    raise
         
         if self.private_key:
             try:
