@@ -206,8 +206,15 @@ class Hyperliquid(BaseExchange):
         ws_url = "wss://api.hyperliquid-testnet.xyz/ws" if self.testnet else "wss://api.hyperliquid.xyz/ws"
         logger.info(f"🔵 Connecting to WebSocket: {ws_url}")
         
+        last_heartbeat = 0
+        
         while True:
             try:
+                # Heartbeat log every 60s
+                if time.time() - last_heartbeat > 60:
+                    logger.info("💓 WebSocket Client Active")
+                    last_heartbeat = time.time()
+
                 async with websockets.connect(ws_url) as websocket:
                     logger.info("✅ WebSocket Connected")
                     self.ws_connected = True
@@ -506,8 +513,15 @@ class Hyperliquid(BaseExchange):
                     logger.error(f"Failed to lazy-init Info for get_user_positions: {e}")
                     return []
 
-            # Use SDK info.user_state(address)
-            user_state = self.info.user_state(address)
+            # Use SDK info.user_state(address) with timeout
+            # Note: The SDK call itself is synchronous, so we wrap it or accept it blocks.
+            # Ideally we should run this in executor if it blocks too long.
+            import asyncio
+            loop = asyncio.get_event_loop()
+            
+            # Run blocking SDK call in executor
+            user_state = await loop.run_in_executor(None, lambda: self.info.user_state(address))
+            
             raw_positions = user_state.get('assetPositions', [])
             
             positions = []
