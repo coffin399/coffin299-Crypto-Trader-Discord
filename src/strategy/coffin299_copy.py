@@ -266,24 +266,30 @@ class Coffin299CopyStrategy:
         # Amount = USD / Price
         amount = usd_value / price
         
+        # 🔵 デバッグ用ログ: 計算過程を記録
+        logger.debug(f"Amount Calculation: max_quantity_jpy={max_quantity_jpy}, jpy_rate={self.jpy_rate}, usd_value={usd_value:.4f}, price={price}, amount={amount}")
+        
         # Rounding
         amount = round(amount, 6)
         
         if amount <= 0:
-            logger.warning(f"Calculated amount is too small: {amount} (JPY: {max_quantity_jpy}, Price: {price})")
+            logger.warning(f"❌ Calculated amount is too small or invalid: {amount} (JPY: {max_quantity_jpy}, Price: {price}, USD: {usd_value:.4f})")
             return
         
-        # 3. Check if we already have a position in this direction
+        # 3. 既に同方向のポジションを持っているかチェック
         if my_pos:
             current_side = my_pos['side'] # LONG or SHORT
             current_size = my_pos.get('size', 0)
             
-            # If we are already LONG and want to BUY
-            if side == 'BUY' and current_side == 'LONG':
+            # ❌ サイズが0または無効な場合はポジションが実質的に存在しないため、重複チェックをスキップ
+            if current_size <= 0:
+                logger.debug(f"Position exists but size is 0 for {pair}, allowing trade.")
+            # ✅ ロングポジションを既に持っていて、さらにBUYしようとしている場合
+            elif side == 'BUY' and current_side == 'LONG':
                 if current_size >= amount * 0.8: # 80% threshold for size
                     logger.info(f"Already have LONG position for {pair} (Size: {current_size:.4f} vs Target: {amount:.4f}). Skipping.")
                     return
-            # If we are already SHORT and want to SELL
+            # ✅ ショートポジションを既に持っていて、さらにSELLしようとしている場合
             elif side == 'SELL' and current_side == 'SHORT':
                 if current_size >= amount * 0.8:
                     logger.info(f"Already have SHORT position for {pair} (Size: {current_size:.4f} vs Target: {amount:.4f}). Skipping.")

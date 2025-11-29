@@ -15,13 +15,15 @@ class BaseExchange(ABC):
             logger.info("Initialized in PAPER MODE")
             logger.info(f"Initial Paper Balance: {self.paper_balance}")
             
+            
             # Load positions from DB
             from ..database import PositionDB
             self.db = PositionDB()
             loaded_positions = self.db.load_positions()
             if loaded_positions:
-                self.positions = loaded_positions
-                logger.info(f"Loaded {len(self.positions)} paper positions from DB.")
+                # ❌ サイズが0のポジションを除外（クローズ済みのデータが残っている場合に対応）
+                self.positions = {pair: pos for pair, pos in loaded_positions.items() if pos.get('amount', 0) != 0}
+                logger.info(f"Loaded {len(self.positions)} paper positions from DB (filtered out zero-size positions).")
 
     @abstractmethod
     async def get_balance(self):
@@ -72,15 +74,22 @@ class BaseExchange(ABC):
                     avg_price = total_cost / new_amt if new_amt != 0 else 0
                     self.positions[pair] = {'amount': new_amt, 'entry_price': avg_price}
                 else:
-                    # Closing short
-                    # Realized PnL logic would go here
+                    # ショート(売り)ポジションをクローズ中
+                    # 実現損益ロジックをここに追加予定
                     self.positions[pair]['amount'] = new_amt
-                    if new_amt == 0:
-                        del self.positions[pair]
-                
-                # Save to DB
-                if hasattr(self, 'db'):
-                    self.db.save_position(pair, self.positions.get(pair, {}).get('amount', 0), self.positions.get(pair, {}).get('entry_price', 0))
+                    # DBに保存してからポジションを削除
+                    if hasattr(self, 'db'):
+                        if new_amt == 0:
+                            # ポジションが完全にクローズされた場合、amount=0としてDB保存（自動削除される）
+                            self.db.save_position(pair, 0, 0)
+                            del self.positions[pair]
+                        else:
+                            # 部分的にクローズされた場合、新しいサイズを保存
+                            self.db.save_position(pair, new_amt, self.positions[pair]['entry_price'])
+                    else:
+                        # DBがない場合でも削除処理を実行
+                        if new_amt == 0:
+                            del self.positions[pair]
 
                 return {'id': f'paper_{int(time.time())}', 'status': 'closed', 'filled': amount, 'price': price}
             else:
@@ -103,14 +112,21 @@ class BaseExchange(ABC):
                     avg_price = total_cost / abs(new_amt) if new_amt != 0 else 0
                     self.positions[pair] = {'amount': new_amt, 'entry_price': avg_price}
                 else:
-                    # Closing long
+                    # ロング(買い)ポジションをクローズ中
                     self.positions[pair]['amount'] = new_amt
-                    if new_amt == 0:
-                        del self.positions[pair]
-                    
-                # Save to DB
-                if hasattr(self, 'db'):
-                    self.db.save_position(pair, self.positions.get(pair, {}).get('amount', 0), self.positions.get(pair, {}).get('entry_price', 0))
+                    # DBに保存してからポジションを削除
+                    if hasattr(self, 'db'):
+                        if new_amt == 0:
+                            # ポジションが完全にクローズされた場合、amount=0としてDB保存（自動削除される）
+                            self.db.save_position(pair, 0, 0)
+                            del self.positions[pair]
+                        else:
+                            # 部分的にクローズされた場合、新しいサイズを保存
+                            self.db.save_position(pair, new_amt, self.positions[pair]['entry_price'])
+                    else:
+                        # DBがない場合でも削除処理を実行
+                        if new_amt == 0:
+                            del self.positions[pair]
 
                 return {'id': f'paper_{int(time.time())}', 'status': 'closed', 'filled': amount, 'price': price}
             else:
