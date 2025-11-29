@@ -17,6 +17,37 @@ class Coffin299GPT51Strategy:
         self.target_pair = config['strategy'].get('gpt51_pair', 'ETH/USDC')
         self.timeframe = config['strategy']['timeframe']
 
+        self.universe = config['strategy'].get(
+            'gpt51_universe',
+            [
+                'BTC',
+                'ETH',
+                'SOL',
+                'AVAX',
+                'BNB',
+                'LTC',
+                'DOGE',
+                'kPEPE',
+                'XRP',
+                'WLD',
+                'ADA',
+                'ENA',
+                'POPCAT',
+                'GOAT',
+                'HYPE',
+                'PENGU',
+                'PUMP',
+                'XPL',
+                'LINEA',
+                'ASTER',
+            ],
+        )
+        self.universe_index = 0
+
+        self.base_symbol = config['strategy'].get('gpt51_base', 'ETH')
+        self.start_base_equiv = None
+        self.max_drawdown_pct = config['strategy'].get('gpt51_max_drawdown_pct', 0.5)
+
         self.last_report_time = datetime.utcnow()
         self.report_interval = timedelta(hours=1)
 
@@ -27,7 +58,14 @@ class Coffin299GPT51Strategy:
             await self.report_status()
             self.last_report_time = now
 
-        await self.execute_trading_logic(self.target_pair)
+        if not self.universe:
+            pair = self.target_pair
+        else:
+            symbol = self.universe[self.universe_index % len(self.universe)]
+            self.universe_index = (self.universe_index + 1) % len(self.universe)
+            pair = f"{symbol}/USDC"
+
+        await self.execute_trading_logic(pair)
 
     async def report_status(self):
         try:
@@ -156,6 +194,10 @@ class Coffin299GPT51Strategy:
         if total_usd <= 0:
             return
 
+        can_open = await self._can_open_new_trade(total_usd)
+        if not can_open:
+            return
+
         risk_pct = self.config["strategy"].get("gpt51_risk_per_trade", 0.01)
         risk_usd = max(total_usd * risk_pct, 0)
         if risk_usd <= 0:
@@ -184,6 +226,34 @@ class Coffin299GPT51Strategy:
         await self.exchange.create_order(pair, "market", order_side, trade_size, price)
         jpy_val = await self._calculate_jpy_value(pair, trade_size, price)
         await self.notifier.notify_trade(notify_side, pair, price, trade_size, reason, total_jpy=jpy_val)
+
+    async def _can_open_new_trade(self, total_usd):
+        try:
+            base_pair = f"{self.base_symbol}/USDC"
+            base_price = await self.exchange.get_market_price(base_pair)
+            if not base_price or base_price <= 0:
+                return True
+
+            current_base_equiv = total_usd / base_price
+
+            if self.start_base_equiv is None:
+                self.start_base_equiv = current_base_equiv
+                return True
+
+            if self.max_drawdown_pct <= 0:
+                return True
+
+            min_base = self.start_base_equiv * (1.0 - self.max_drawdown_pct)
+            if current_base_equiv < min_base:
+                logger.warning(
+                    f"ETH-equivalent balance below drawdown limit in GPT5.1. current={current_base_equiv:.6f}, min={min_base:.6f}"
+                )
+                return False
+
+            return True
+        except Exception as e:
+            logger.warning(f"Failed to evaluate drawdown guard in GPT5.1: {e}")
+            return True
 
     async def _calculate_jpy_value(self, pair, amount, price):
         try:

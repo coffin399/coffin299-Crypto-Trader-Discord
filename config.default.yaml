@@ -42,14 +42,42 @@ exchanges:
 # Trading Strategy: Coffin299
 # ------------------------------------------------------------------------------
 strategy:
+  # General Strategy Settings
   name: "coffin299strategy"
-  type: "coffin299" # Options: "coffin299", "copy_leaderboard"
+  type: "coffin299_GPT5.1" # Options: "coffin299", "copy_leaderboard", "coffin299_GPT5.1"
   timeframe: "15m"
   leverage: 1  # Leverage multiplier default:5
-  max_open_positions: 10
+  max_open_positions: 0 # 0 is infinite
   loop_interval_seconds: 0 # Main loop wait time (default 60s)
+
+  # GPT5.1 Strategy Settings (type == "coffin299_GPT5.1")
+  gpt51_pair: "ETH/USDC"
+  gpt51_universe:
+    - "BTC"
+    - "ETH"
+    - "SOL"
+    - "AVAX"
+    - "BNB"
+    - "LTC"
+    - "DOGE"
+    - "kPEPE"
+    - "XRP"
+    - "WLD"
+    - "ADA"
+    - "ENA"
+    - "POPCAT"
+    - "GOAT"
+    - "HYPE"
+    - "PENGU"
+    - "PUMP"
+    - "XPL"
+    - "LINEA"
+    - "ASTER"
+  gpt51_base: "ETH"
+  gpt51_risk_per_trade: 0.01
+  gpt51_max_drawdown_pct: 0.5
   
-  # Copy Trading Settings
+  # Copy Trading Settings (type == "copy_leaderboard")
   copy_trading:
     copy_mode: "mirror"       # "aggregate" = 多数決コピー, "mirror" = 特定トレーダー完全コピー
     leaderboard_limit: 5
