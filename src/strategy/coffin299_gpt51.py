@@ -51,6 +51,7 @@ class Coffin299GPT51Strategy:
         # Aggressiveness controls
         self.breakout_lookback = int(config['strategy'].get('gpt51_breakout_lookback', 20))
         self.atr_multiplier = float(config['strategy'].get('gpt51_atr_multiplier', 2.0))
+        self.max_pyramids = int(config['strategy'].get('gpt51_max_pyramids', 1))
 
         self.last_report_time = datetime.utcnow()
         self.report_interval = timedelta(minutes=30)
@@ -60,6 +61,9 @@ class Coffin299GPT51Strategy:
 
         # Track symbols for which we've already logged additional-entry skips
         self._additional_entry_logged = set()
+
+        # Track how many entries we've taken per (symbol, side)
+        self._entry_counts = {}
 
         # Start periodic balance/PnL report task (initial + every 30 mins)
         asyncio.create_task(self.periodic_report_loop())
@@ -201,32 +205,45 @@ class Coffin299GPT51Strategy:
             side = my_pos["side"]
             size = my_pos["size"]
 
+            symbol = pair.split("/")[0]
+            key_long = (symbol, "LONG")
+            key_short = (symbol, "SHORT")
+
             if side == "LONG" and (not up_trend or breakout_short):
                 await self.exchange.create_order(pair, "market", "sell", size, price)
                 jpy_val = await self._calculate_jpy_value(pair, size, price)
                 await self.notifier.notify_trade("SELL", pair, price, size, "Exit LONG", total_jpy=jpy_val)
+                # Reset entry counters/log flags on exit
+                self._entry_counts.pop(key_long, None)
+                self._additional_entry_logged.discard(key_long)
                 return
 
             if side == "SHORT" and (not down_trend or breakout_long):
                 await self.exchange.create_order(pair, "market", "buy", size, price)
                 jpy_val = await self._calculate_jpy_value(pair, size, price)
                 await self.notifier.notify_trade("BUY", pair, price, size, "Exit SHORT", total_jpy=jpy_val)
+                # Reset entry counters/log flags on exit
+                self._entry_counts.pop(key_short, None)
+                self._additional_entry_logged.discard(key_short)
                 return
 
-            # If we already have a position in the same direction as the new signal, do not add more
-            symbol = pair.split("/")[0]
+            # If we already have a position in the same direction as the new signal, allow up to max_pyramids entries
             if side == "LONG" and breakout_long:
-                key = (symbol, "LONG")
-                if key not in self._additional_entry_logged:
-                    logger.info(f"GPT5.1 already has LONG position on {pair}, skipping additional entry.")
-                    self._additional_entry_logged.add(key)
-                return
+                key = key_long
+                count = self._entry_counts.get(key, 1)
+                if self.max_pyramids > 0 and count >= self.max_pyramids:
+                    if key not in self._additional_entry_logged:
+                        logger.info(f"GPT5.1 already has LONG position on {pair}, skipping additional entry (max pyramids reached).")
+                        self._additional_entry_logged.add(key)
+                    return
             if side == "SHORT" and breakout_short:
-                key = (symbol, "SHORT")
-                if key not in self._additional_entry_logged:
-                    logger.info(f"GPT5.1 already has SHORT position on {pair}, skipping additional entry.")
-                    self._additional_entry_logged.add(key)
-                return
+                key = key_short
+                count = self._entry_counts.get(key, 1)
+                if self.max_pyramids > 0 and count >= self.max_pyramids:
+                    if key not in self._additional_entry_logged:
+                        logger.info(f"GPT5.1 already has SHORT position on {pair}, skipping additional entry (max pyramids reached).")
+                        self._additional_entry_logged.add(key)
+                    return
 
         max_positions = self.config["strategy"].get("max_open_positions", 0)
         if max_positions > 0:
@@ -266,14 +283,22 @@ class Coffin299GPT51Strategy:
             order_side = "buy"
             notify_side = "BUY"
             reason = "GPT5.1 LONG breakout"
+            symbol = pair.split("/")[0]
+            key = (symbol, "LONG")
         else:
             order_side = "sell"
             notify_side = "SELL"
             reason = "GPT5.1 SHORT breakout"
+            symbol = pair.split("/")[0]
+            key = (symbol, "SHORT")
 
         await self.exchange.create_order(pair, "market", order_side, trade_size, price)
         jpy_val = await self._calculate_jpy_value(pair, trade_size, price)
         await self.notifier.notify_trade(notify_side, pair, price, trade_size, reason, total_jpy=jpy_val)
+
+        # Increment entry count for this symbol/side
+        prev = self._entry_counts.get(key, 0)
+        self._entry_counts[key] = prev + 1
 
     async def _can_open_new_trade(self, total_usd):
         try:

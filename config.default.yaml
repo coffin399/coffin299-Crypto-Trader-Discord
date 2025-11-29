@@ -78,6 +78,7 @@ strategy:
   gpt51_max_drawdown_pct: 0.5
   gpt51_breakout_lookback: 20   # candles to look back for breakout
   gpt51_atr_multiplier: 2.0     # stop distance = ATR * multiplier
+  gpt51_max_pyramids: 3         # max entries per symbol+side
   
   # Copy Trading Settings (type == "copy_leaderboard")
   copy_trading:
