@@ -272,8 +272,8 @@ class Coffin299CopyStrategy:
         # 🔵 デバッグ用ログ: 計算過程を記録
         logger.debug(f"Amount Calculation: max_quantity_jpy={max_quantity_jpy}, jpy_rate={self.jpy_rate}, usd_value={usd_value:.4f}, price={price}, amount={amount}")
         
-        # Rounding
-        amount = round(amount, 6)
+        # Rounding - 8桁に変更（小額ポジションの精度向上）
+        amount = round(amount, 8)
         
         if amount <= 0:
             logger.warning(f"❌ Calculated amount is too small or invalid: {amount} (JPY: {max_quantity_jpy}, Price: {price}, USD: {usd_value:.4f})")
@@ -290,12 +290,12 @@ class Coffin299CopyStrategy:
             # ✅ ロングポジションを既に持っていて、さらにBUYしようとしている場合
             elif side == 'BUY' and current_side == 'LONG':
                 if current_size >= amount * 0.8: # 80% threshold for size
-                    logger.info(f"Already have LONG position for {pair} (Size: {current_size:.4f} vs Target: {amount:.4f}). Skipping.")
+                    logger.info(f"Already have LONG position for {pair} (Size: {current_size:.8f} vs Target: {amount:.8f}). Skipping.")
                     return
             # ✅ ショートポジションを既に持っていて、さらにSELLしようとしている場合
             elif side == 'SELL' and current_side == 'SHORT':
                 if current_size >= amount * 0.8:
-                    logger.info(f"Already have SHORT position for {pair} (Size: {current_size:.4f} vs Target: {amount:.4f}). Skipping.")
+                    logger.info(f"Already have SHORT position for {pair} (Size: {current_size:.8f} vs Target: {amount:.8f}). Skipping.")
                     return
         
         try:
