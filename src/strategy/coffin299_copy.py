@@ -339,10 +339,102 @@ class Coffin299CopyStrategy:
                     total_pnl_usd=total_pnl_usd,
                     total_pnl_jpy=total_pnl_jpy
                 )
+            if not price or price <= 0:
+                price = await self.exchange.get_market_price(pair)
+        except Exception as e:
+            logger.error(f"Copy Trade Failed: {e}")
+
+    async def update_jpy_rate_loop(self):
+        logger.info("Starting JPY Rate Polling Task...")
+        url = "https://api.exchangerate-api.com/v4/latest/USD"
+        
+        while True:
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(url) as resp:
+                        if resp.status == 200:
+                            data = await resp.json()
+                            rate = data.get('rates', {}).get('JPY')
+                            if rate:
+                                self.jpy_rate = float(rate)
+                                logger.info(f"Updated USD/JPY Rate: {self.jpy_rate}")
+                            else:
+                                logger.warning("JPY rate not found in API response")
+                        else:
+                            logger.warning(f"Failed to fetch exchange rate: {resp.status}")
+            except Exception as e:
+                logger.error(f"Error fetching exchange rate: {e}")
+                
+            await asyncio.sleep(3600) # 1 hour
+
+    async def periodic_report_loop(self):
+        logger.info("Starting Periodic Report Task (Every 30 mins)...")
+        
+        # Initial Report
+        # Wait 10s to ensure WS prices are populated for accurate PnL
+        await asyncio.sleep(10) 
+        await self.send_report()
+        
+        while True:
+            # Wait 30 minutes
+            await asyncio.sleep(1800)
+            await self.send_report()
+
+    async def send_report(self):
+        try:
+            logger.info("🔵 Generating periodic report...")
+            
+            # Get balance
+            balance = await self.exchange.get_balance()
+            if not balance:
+                logger.error("🔴 Failed to get balance - balance is empty")
+                return
+                
+            total_usd = float(balance.get('total', {}).get('USDC', 0))
+            total_jpy = total_usd * self.jpy_rate
+            
+            logger.info(f"Balance: ${total_usd:.2f} (¥{total_jpy:.0f})")
+            
+            # Get positions
+            positions = await self.exchange.get_positions()
+            if positions is None:
+                logger.warning("🟡 get_positions returned None, using empty list")
+                positions = []
+            
+            pos_summary = {}
+            total_pnl_usd = 0.0
+            
+            for p in positions:
+                try:
+                    # Show Value if available, otherwise PnL
+                    val = p.get('value', 0)
+                    pnl = p.get('pnl', 0)
+                    total_pnl_usd += pnl
+                    
+                    # Format: Size ($Value)
+                    # Round size to 4 decimals, Value to 2 decimals
+                    size_str = f"{p['size']:.4f}".rstrip('0').rstrip('.')
+                    pos_summary[p['symbol']] = f"{size_str} (${val:.2f})"
+                except Exception as e:
+                    logger.error(f"🔴 Error processing position {p}: {e}")
+                    continue
+            
+            total_pnl_jpy = total_pnl_usd * self.jpy_rate
+            
+            logger.info(f"PnL: ${total_pnl_usd:.2f} (¥{total_pnl_jpy:.0f}), Positions: {len(positions)}")
+            
+            # Send notification
+            try:
+                await self.notifier.notify_balance(
+                    total_jpy, 
+                    currency="JPY", 
+                    changes=pos_summary,
+                    total_pnl_usd=total_pnl_usd,
+                    total_pnl_jpy=total_pnl_jpy
+                )
                 logger.info(f"🟢 Sent Periodic Report. Total: ${total_usd:.2f} (¥{total_jpy:.0f}), PnL: ${total_pnl_usd:.2f}")
             except Exception as e:
                 logger.error(f"🔴 Failed to send balance notification: {e}")
                 
         except Exception as e:
             logger.error(f"🔴 Error in periodic report: {e}", exc_info=True)
-
