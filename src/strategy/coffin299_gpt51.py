@@ -49,15 +49,15 @@ class Coffin299GPT51Strategy:
         self.max_drawdown_pct = config['strategy'].get('gpt51_max_drawdown_pct', 0.5)
 
         self.last_report_time = datetime.utcnow()
-        self.report_interval = timedelta(hours=1)
+        self.report_interval = timedelta(minutes=30)
+
+        # OHLCV cache to reduce CCXT calls { (pair, timeframe): (timestamp, data) }
+        self.ohlcv_cache = {}
+
+        # Start periodic balance/PnL report task (initial + every 30 mins)
+        asyncio.create_task(self.periodic_report_loop())
 
     async def run_cycle(self):
-        now = datetime.utcnow()
-
-        if now - self.last_report_time > self.report_interval:
-            await self.report_status()
-            self.last_report_time = now
-
         if not self.universe:
             pair = self.target_pair
         else:
@@ -66,6 +66,17 @@ class Coffin299GPT51Strategy:
             pair = f"{symbol}/USDC"
 
         await self.execute_trading_logic(pair)
+
+    async def periodic_report_loop(self):
+        logger.info("Starting GPT5.1 Periodic Report Task (Every 30 mins)...")
+
+        # Initial Report (wait a bit to ensure caches are populated)
+        await asyncio.sleep(10)
+        await self.report_status()
+
+        while True:
+            await asyncio.sleep(1800)
+            await self.report_status()
 
     async def report_status(self):
         try:
@@ -120,7 +131,22 @@ class Coffin299GPT51Strategy:
             logger.error(f"Error in GPT5.1 report: {e}")
 
     async def execute_trading_logic(self, pair):
-        ohlcv = await self.exchange.get_ohlcv(pair, self.timeframe, limit=200)
+        cache_key = (pair, self.timeframe)
+        now_ts = datetime.utcnow().timestamp()
+
+        ohlcv = None
+        cache_entry = self.ohlcv_cache.get(cache_key)
+        if cache_entry:
+            ts, data = cache_entry
+            # Reuse cached OHLCV for 180 seconds to avoid CCXT rate limits
+            if now_ts - ts < 180:
+                ohlcv = data
+
+        if ohlcv is None:
+            ohlcv = await self.exchange.get_ohlcv(pair, self.timeframe, limit=200)
+            if ohlcv:
+                self.ohlcv_cache[cache_key] = (now_ts, ohlcv)
+
         if not ohlcv or len(ohlcv) < 100:
             return
 
