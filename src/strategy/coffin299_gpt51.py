@@ -107,8 +107,6 @@ class Coffin299GPT51Strategy:
             except Exception:
                 usd_jpy = 150.0
 
-            total_jpy = total_usd * usd_jpy
-
             positions = []
             if hasattr(self.exchange, 'get_positions'):
                 try:
@@ -125,6 +123,9 @@ class Coffin299GPT51Strategy:
                 size_str = f"{p['size']:.4f}".rstrip('0').rstrip('.')
                 changes[p['symbol']] = f"{size_str} (${val:.2f})"
 
+            is_paper = getattr(self.exchange, 'paper_mode', False)
+            equity_usd = total_usd + total_pnl_usd if is_paper else total_usd
+            total_jpy = equity_usd * usd_jpy
             total_pnl_jpy = total_pnl_usd * usd_jpy
 
             await self.notifier.notify_balance(
@@ -136,7 +137,7 @@ class Coffin299GPT51Strategy:
             )
 
             logger.info(
-                f"GPT5.1 Report: Total=${total_usd:.2f} (¥{total_jpy:.0f}), PnL=${total_pnl_usd:.2f} (¥{total_pnl_jpy:.0f})"
+                f"GPT5.1 Report: Total=${equity_usd:.2f} (¥{total_jpy:.0f}), PnL=${total_pnl_usd:.2f} (¥{total_pnl_jpy:.0f})"
             )
         except Exception as e:
             logger.error(f"Error in GPT5.1 report: {e}")
