@@ -68,6 +68,9 @@ class Coffin299CopyStrategy:
         
         # Get target trader's positions
         target_positions = await self.exchange.get_user_positions(target_trader)
+        logger.info(f"🔍 Target trader has {len(target_positions)} positions")
+        for pos in target_positions:
+            logger.info(f"  - {pos['symbol']}: {pos['side']} size={pos.get('size', 0)}")
         
         # Get our current positions
         my_positions = await self.exchange.get_positions()
