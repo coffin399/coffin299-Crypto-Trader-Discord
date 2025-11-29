@@ -44,7 +44,7 @@ exchanges:
 strategy:
   # General Strategy Settings
   name: "coffin299strategy"
-  type: "coffin299_GPT5.1" # Options: "coffin299", "copy_leaderboard", "coffin299_GPT5.1"
+  type: "copy_leaderboard" # Options: "coffin299", "copy_leaderboard", "coffin299_GPT5.1"
   timeframe: "15m"
   leverage: 1  # Leverage multiplier default:5
   max_open_positions: 0 # 0 is infinite
