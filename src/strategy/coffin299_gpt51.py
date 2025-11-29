@@ -210,6 +210,14 @@ class Coffin299GPT51Strategy:
                 await self.notifier.notify_trade("BUY", pair, price, size, "Exit SHORT", total_jpy=jpy_val)
                 return
 
+            # If we already have a position in the same direction as the new signal, do not add more
+            if side == "LONG" and breakout_long:
+                logger.info(f"GPT5.1 already has LONG position on {pair}, skipping additional entry.")
+                return
+            if side == "SHORT" and breakout_short:
+                logger.info(f"GPT5.1 already has SHORT position on {pair}, skipping additional entry.")
+                return
+
         max_positions = self.config["strategy"].get("max_open_positions", 0)
         if max_positions > 0:
             open_count = len(positions)
