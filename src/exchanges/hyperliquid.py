@@ -65,7 +65,7 @@ class Hyperliquid(BaseExchange):
                 except:
                     pass
                     
- conv_val = eth_bal * price
+                conv_val = eth_bal * price
                 self.paper_balance['ETH'] = 0
                 self.paper_balance['USDC'] = usdc_bal + conv_val
                 logger.info(f"Paper Mode: Converted {eth_bal} ETH to {conv_val:.2f} USDC for trading.")
