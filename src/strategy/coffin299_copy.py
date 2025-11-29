@@ -339,10 +339,12 @@ class Coffin299CopyStrategy:
                     total_pnl_usd=total_pnl_usd,
                     total_pnl_jpy=total_pnl_jpy
                 )
-            if not price or price <= 0:
-                price = await self.exchange.get_market_price(pair)
+                logger.info(f"🟢 Sent Periodic Report. Total: ${total_usd:.2f} (¥{total_jpy:.0f}), PnL: ${total_pnl_usd:.2f}")
+            except Exception as e:
+                logger.error(f"🔴 Failed to send balance notification: {e}")
+                
         except Exception as e:
-            logger.error(f"Copy Trade Failed: {e}")
+            logger.error(f"🔴 Error in periodic report: {e}", exc_info=True)
 
     async def update_jpy_rate_loop(self):
         logger.info("Starting JPY Rate Polling Task...")
