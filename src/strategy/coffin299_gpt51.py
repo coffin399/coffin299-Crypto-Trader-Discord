@@ -58,6 +58,9 @@ class Coffin299GPT51Strategy:
         # OHLCV cache to reduce CCXT calls { (pair, timeframe): (timestamp, data) }
         self.ohlcv_cache = {}
 
+        # Track symbols for which we've already logged additional-entry skips
+        self._additional_entry_logged = set()
+
         # Start periodic balance/PnL report task (initial + every 30 mins)
         asyncio.create_task(self.periodic_report_loop())
 
@@ -211,11 +214,18 @@ class Coffin299GPT51Strategy:
                 return
 
             # If we already have a position in the same direction as the new signal, do not add more
+            symbol = pair.split("/")[0]
             if side == "LONG" and breakout_long:
-                logger.info(f"GPT5.1 already has LONG position on {pair}, skipping additional entry.")
+                key = (symbol, "LONG")
+                if key not in self._additional_entry_logged:
+                    logger.info(f"GPT5.1 already has LONG position on {pair}, skipping additional entry.")
+                    self._additional_entry_logged.add(key)
                 return
             if side == "SHORT" and breakout_short:
-                logger.info(f"GPT5.1 already has SHORT position on {pair}, skipping additional entry.")
+                key = (symbol, "SHORT")
+                if key not in self._additional_entry_logged:
+                    logger.info(f"GPT5.1 already has SHORT position on {pair}, skipping additional entry.")
+                    self._additional_entry_logged.add(key)
                 return
 
         max_positions = self.config["strategy"].get("max_open_positions", 0)
