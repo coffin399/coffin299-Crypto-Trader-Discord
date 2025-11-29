@@ -3,6 +3,8 @@ from hyperliquid.info import Info
 from hyperliquid.exchange import Exchange
 from hyperliquid.utils import constants
 from datetime import datetime
+import asyncio
+import time
 from .base import BaseExchange
 from ..logger import setup_logger
 
@@ -19,25 +21,21 @@ class Hyperliquid(BaseExchange):
         
         self.base_url = constants.TESTNET_API_URL if self.testnet else constants.MAINNET_API_URL
         
-        # Initialize SDK components with retry logic
-        max_retries = 3
-        retry_delay = 2  # seconds
+        # WebSocket data caches
+        self.price_cache = {}
+        self.position_cache = []
+        self.balance_cache = {}
+        self.last_update_time = {}
+        self.ws_connected = False
         
-        for attempt in range(max_retries):
-            try:
-                self.info = Info(self.base_url, skip_ws=True)
-                logger.info(f"Successfully connected to Hyperliquid API")
-                break
-            except Exception as e:
-                if attempt < max_retries - 1:
-                    logger.warning(f"Failed to connect to Hyperliquid API (attempt {attempt + 1}/{max_retries}): {e}")
-                    logger.info(f"Retrying in {retry_delay} seconds...")
-                    import time
-                    time.sleep(retry_delay)
-                    retry_delay *= 2  # Exponential backoff
-                else:
-                    logger.error(f"Failed to connect to Hyperliquid API after {max_retries} attempts: {e}")
-                    raise
+        # Initialize Info (lightweight, for REST API fallback only)
+        # WebSocket will be started separately via start_websocket()
+        self.info = None
+        try:
+            self.info = Info(self.base_url, skip_ws=True)
+            logger.info("Hyperliquid Info initialized (REST API fallback available)")
+        except Exception as e:
+            logger.warning(f"Failed to initialize Info (WebSocket will be primary): {e}")
         
         if self.private_key:
             try:
@@ -67,11 +65,8 @@ class Hyperliquid(BaseExchange):
                 except:
                     pass
                     
-                conv_val = eth_bal * price
+ conv_val = eth_bal * price
                 self.paper_balance['ETH'] = 0
-                self.paper_balance['USDC'] = usdc_bal + conv_val
-                logger.info(f"Paper Mode: Converted {eth_bal} ETH to {conv_val:.2f} USDC for trading.")
-                
                 self.paper_balance['USDC'] = usdc_bal + conv_val
                 logger.info(f"Paper Mode: Converted {eth_bal} ETH to {conv_val:.2f} USDC for trading.")
                 
@@ -82,11 +77,34 @@ class Hyperliquid(BaseExchange):
                 'used': {'USDC': 0.0} # Simplified
             }
         
+        # Prefer WebSocket cache
+        if self.balance_cache:
+            # Check staleness
+            last_update = self.last_update_time.get('balance', 0)
+            if time.time() - last_update < 60:
+                total_equity = self.balance_cache.get('accountValue', 0)
+                withdrawable = self.balance_cache.get('withdrawable', 0)
+                logger.debug(f"💰 Balance from WebSocket cache: ${total_equity:.2f}")
+                return {
+                    'total': {'USDC': total_equity},
+                    'free': {'USDC': withdrawable},
+                    'used': {'USDC': total_equity - withdrawable}
+                }
+            else:
+                logger.warning(f"⚠️ Balance cache stale ({int(time.time() - last_update)}s old), falling back to REST")
+        
+        # Fallback to REST API
         try:
+            if not self.info:
+                # Try lazy init
+                try:
+                    self.info = Info(self.base_url, skip_ws=True)
+                except:
+                    logger.warning("Info not initialized, cannot fetch balance")
+                    return {'total': {}, 'free': {}, 'used': {}}
+                
+            logger.debug("⚠️ Balance cache empty or stale, fetching from REST API")
             user_state = self.info.user_state(self.wallet_address)
-            # user_state['marginSummary'] contains total equity
-            # user_state['assetPositions'] contains positions
-            
             total_equity = float(user_state.get('marginSummary', {}).get('accountValue', 0))
             
             # Simplified balance structure
@@ -145,39 +163,32 @@ class Hyperliquid(BaseExchange):
                     'pnl': pnl
                 })
             return formatted_positions
+        
+        # Prefer WebSocket cache
+        if self.position_cache:
+            # Check staleness (e.g. 60 seconds)
+            last_update = self.last_update_time.get('positions', 0)
+            if time.time() - last_update < 60:
+                logger.debug(f"💼 Positions from WebSocket cache: {len(self.position_cache)} active")
+                return self.position_cache
+            else:
+                logger.warning(f"⚠️ Position cache stale ({int(time.time() - last_update)}s old), falling back to REST")
             
+        # Fallback to REST API
         try:
+            if not self.info:
+                # Try lazy init
+                try:
+                    self.info = Info(self.base_url, skip_ws=True)
+                except:
+                    logger.warning("Info not initialized, cannot fetch positions")
+                    return []
+                
+            logger.debug("⚠️ Position cache empty or stale, fetching from REST API")
             user_state = self.info.user_state(self.wallet_address)
             raw_positions = user_state.get('assetPositions', [])
             
-            positions = []
-            for p in raw_positions:
-                pos = p.get('position', {})
-                size = float(pos.get('szi', 0))
-                if size == 0: continue
-                
-                entry_price = float(pos.get('entryPx', 0))
-                symbol = pos.get('coin', 'Unknown')
-                
-                # Calculate PnL (Unrealized)
-                pnl = float(pos.get('unrealizedPnl', 0))
-                
-                # Try to get mark price from cache for value calc
-                mark_price = 0
-                if hasattr(self, 'price_cache'):
-                    mark_price = self.price_cache.get(symbol, 0)
-                
-                position_value = abs(size) * mark_price
-                
-                positions.append({
-                    'symbol': symbol,
-                    'size': abs(size),
-                    'side': 'LONG' if size > 0 else 'SHORT',
-                    'entry_price': entry_price,
-                    'mark_price': mark_price,
-                    'value': position_value,
-                    'pnl': pnl
-                })
+            positions = self._parse_positions(raw_positions)
             return positions
         except Exception as e:
             logger.error(f"Failed to fetch positions: {e}")
@@ -185,53 +196,163 @@ class Hyperliquid(BaseExchange):
 
     async def start_websocket(self):
         """
-        Starts the WebSocket connection to listen for price updates (allMids).
+        Starts the WebSocket connection to listen for:
+        - allMids: price updates
+        - user: position, balance, and order updates (if wallet configured)
         """
         import websockets
         import json
         
         ws_url = "wss://api.hyperliquid-testnet.xyz/ws" if self.testnet else "wss://api.hyperliquid.xyz/ws"
-        logger.info(f"Connecting to WebSocket: {ws_url}")
-        
-        self.price_cache = {}
+        logger.info(f"🔵 Connecting to WebSocket: {ws_url}")
         
         while True:
             try:
                 async with websockets.connect(ws_url) as websocket:
-                    logger.info("WebSocket Connected")
+                    logger.info("✅ WebSocket Connected")
+                    self.ws_connected = True
                     
-                    # Subscribe to allMids
-                    subscribe_msg = {
+                    # Subscribe to allMids (price data)
+                    subscribe_allmids = {
                         "method": "subscribe",
                         "subscription": {"type": "allMids"}
                     }
-                    await websocket.send(json.dumps(subscribe_msg))
+                    await websocket.send(json.dumps(subscribe_allmids))
+                    logger.info("📊 Subscribed to allMids")
                     
+                    # Subscribe to user data (if wallet address configured)
+                    if self.wallet_address and not self.paper_mode:
+                        subscribe_user = {
+                            "method": "subscribe",
+                            "subscription": {
+                                "type": "user",
+                                "user": self.wallet_address
+                            }
+                        }
+                        await websocket.send(json.dumps(subscribe_user))
+                        logger.info(f"👤 Subscribed to user events for {self.wallet_address[:10]}...")
+                    
+                    # Message handling loop
                     while True:
                         msg = await websocket.recv()
                         data = json.loads(msg)
                         
                         channel = data.get("channel")
+                        
+                        # Handle price updates
                         if channel == "allMids":
-                            # data['data']['mids'] is dictionary of {coin: price}
-                            mids = data.get("data", {}).get("mids", {})
-                            for coin, price in mids.items():
-                                self.price_cache[coin] = float(price)
-                                
-            except Exception as e:
-                logger.error(f"WebSocket Error: {e}. Reconnecting in 5s...")
+                            self._handle_price_update(data)
+                        
+                        # Handle user events (positions, balance, fills)
+                        elif channel == "user":
+                            self._handle_user_event(data)
+                        
+                        # Handle subscription confirmations
+                        elif channel == "subscriptionResponse":
+                            sub_type = data.get("data", {}).get("subscription", {}).get("type")
+                            logger.debug(f"✅ Subscription confirmed: {sub_type}")
+                            
+            except websockets.exceptions.ConnectionClosed as e:
+                self.ws_connected = False
+                logger.warning(f"⚠️ WebSocket connection closed: {e}. Reconnecting in 5s...")
                 await asyncio.sleep(5)
+            except Exception as e:
+                self.ws_connected = False
+                logger.error(f"❌ WebSocket Error: {e}. Reconnecting in 5s...")
+                await asyncio.sleep(5)
+    
+    def _handle_price_update(self, data):
+        """Handle allMids price updates"""
+        mids = data.get("data", {}).get("mids", {})
+        if mids:
+            for coin, price in mids.items():
+                self.price_cache[coin] = float(price)
+            self.last_update_time['prices'] = time.time()
+            logger.debug(f"📈 Updated {len(mids)} prices")
+    
+    def _handle_user_event(self, data):
+        """Handle user event updates (positions, balance, fills)"""
+        event_data = data.get("data", {})
+        
+        # Update positions from assetPositions
+        if "assetPositions" in event_data:
+            raw_positions = event_data["assetPositions"]
+            self.position_cache = self._parse_positions(raw_positions)
+            self.last_update_time['positions'] = time.time()
+            logger.debug(f"💼 Updated positions: {len(self.position_cache)} active")
+        
+        # Update balance from crossMarginSummary
+        if "crossMarginSummary" in event_data:
+            margin_summary = event_data["crossMarginSummary"]
+            self.balance_cache = {
+                'accountValue': float(margin_summary.get('accountValue', 0)),
+                'totalMarginUsed': float(margin_summary.get('totalMarginUsed', 0)),
+                'withdrawable': float(margin_summary.get('withdrawable', 0))
+            }
+            self.last_update_time['balance'] = time.time()
+            logger.debug(f"💰 Updated balance: ${self.balance_cache.get('accountValue', 0):.2f}")
+        
+        # Log fills (trades executed)
+        if "fills" in event_data:
+            fills = event_data["fills"]
+            for fill in fills:
+                coin = fill.get("coin", "?")
+                side = fill.get("side", "?")
+                px = fill.get("px", 0)
+                sz = fill.get("sz", 0)
+                logger.info(f"✅ Fill executed: {side} {sz} {coin} @ {px}")
+    
+    def _parse_positions(self, raw_positions):
+        """Parse raw position data into standardized format"""
+        positions = []
+        for p in raw_positions:
+            pos = p.get('position', {})
+            size = float(pos.get('szi', 0))
+            if size == 0:
+                continue
+            
+            symbol = pos.get('coin', 'Unknown')
+            entry_price = float(pos.get('entryPx', 0))
+            pnl = float(pos.get('unrealizedPnl', 0))
+            
+            # Get mark price from cache
+            mark_price = self.price_cache.get(symbol, entry_price)
+            position_value = abs(size) * mark_price
+            
+            positions.append({
+                'symbol': symbol,
+                'size': abs(size),
+                'side': 'LONG' if size > 0 else 'SHORT',
+                'entry_price': entry_price,
+                'mark_price': mark_price,
+                'value': position_value,
+                'pnl': pnl
+            })
+        return positions
 
     async def get_market_price(self, pair):
         # Use cache if available
         if hasattr(self, 'price_cache') and self.price_cache:
-            coin = pair.split('/')[0]
-            price = self.price_cache.get(coin)
-            if price:
-                return price
+            # Check staleness
+            last_update = self.last_update_time.get('prices', 0)
+            if time.time() - last_update < 60:
+                coin = pair.split('/')[0]
+                price = self.price_cache.get(coin)
+                if price:
+                    return price
+            else:
+                logger.debug(f"⚠️ Price cache stale ({int(time.time() - last_update)}s old)")
                 
         # Fallback to REST
         try:
+            if not self.info:
+                # Try lazy init
+                try:
+                    self.info = Info(self.base_url, skip_ws=True)
+                except:
+                    logger.warning("Info not initialized, cannot fetch price")
+                    return 0.0
+
             coin = pair.split('/')[0]
             all_mids = self.info.all_mids()
             return float(all_mids.get(coin, 0))
@@ -244,9 +365,20 @@ class Hyperliquid(BaseExchange):
         Fetches prices for all coins. Uses WS cache if available.
         """
         if hasattr(self, 'price_cache') and self.price_cache:
-            return self.price_cache.copy()
+            # Check staleness
+            last_update = self.last_update_time.get('prices', 0)
+            if time.time() - last_update < 60:
+                return self.price_cache.copy()
+            else:
+                logger.debug(f"⚠️ Price cache stale ({int(time.time() - last_update)}s old)")
             
         try:
+            if not self.info:
+                try:
+                    self.info = Info(self.base_url, skip_ws=True)
+                except:
+                    return {}
+                    
             all_mids = self.info.all_mids()
             return {k: float(v) for k, v in all_mids.items()}
         except Exception as e:
@@ -351,6 +483,14 @@ class Hyperliquid(BaseExchange):
         Fetches open positions for a specific user address.
         """
         try:
+            # Lazy init info if needed
+            if not self.info:
+                try:
+                    self.info = Info(self.base_url, skip_ws=True)
+                except Exception as e:
+                    logger.error(f"Failed to lazy-init Info for get_user_positions: {e}")
+                    return []
+
             # Use SDK info.user_state(address)
             user_state = self.info.user_state(address)
             raw_positions = user_state.get('assetPositions', [])
