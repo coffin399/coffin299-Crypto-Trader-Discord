@@ -301,6 +301,21 @@ class Hyperliquid(BaseExchange):
                 px = fill.get("px", 0)
                 sz = fill.get("sz", 0)
                 logger.info(f"✅ Fill executed: {side} {sz} {coin} @ {px}")
+
+        # Log order updates (canceled, open, etc)
+        if "orderUpdates" in event_data:
+            order_updates = event_data["orderUpdates"]
+            for update in order_updates:
+                order = update.get('order', {})
+                status = update.get('status', 'unknown')
+                
+                if status == 'canceled':
+                    coin = order.get('coin', '?')
+                    side = order.get('side', '?')
+                    sz = order.get('sz', 0)
+                    logger.info(f"🚫 Order Canceled: {side} {sz} {coin}")
+                elif status == 'open':
+                    logger.debug(f"📝 Order Open: {order.get('coin')} {order.get('side')}")
     
     def _parse_positions(self, raw_positions):
         """Parse raw position data into standardized format"""
