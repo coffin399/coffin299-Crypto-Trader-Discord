@@ -72,6 +72,10 @@ async def start_bot():
         from src.strategy.coffin299_copy import Coffin299CopyStrategy
         strategy = Coffin299CopyStrategy(config, exchange, ai, discord_notifier)
         logger.info("Started in Copy Trading Mode")
+    elif strategy_type == 'coffin299_GPT5.1':
+        from src.strategy.coffin299_gpt51 import Coffin299GPT51Strategy
+        strategy = Coffin299GPT51Strategy(config, exchange, ai, discord_notifier)
+        logger.info("Started in GPT5.1 Strategy Mode")
     else:
         from src.strategy.coffin299 import Coffin299Strategy
         strategy = Coffin299Strategy(config, exchange, ai, discord_notifier)

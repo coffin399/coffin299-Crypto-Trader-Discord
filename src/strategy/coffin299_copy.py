@@ -193,7 +193,7 @@ class Coffin299CopyStrategy:
              
         self.last_leaderboard_update = datetime.utcnow()
 
-    async def execute_copy_trade(self, symbol, side, reason, price=None):
+    async def execute_copy_trade(self, symbol, side, reason, price=None, close_position=False):
         pair = f"{symbol}/USDC"
         
         # 1. Safety Margin Check
@@ -231,6 +231,17 @@ class Coffin299CopyStrategy:
         current_positions = await self.exchange.get_positions()
         my_pos = next((p for p in current_positions if p['symbol'] == symbol), None)
 
+        # If this is an explicit close request (target trader closed position), just close and exit
+        if close_position:
+            if not my_pos or my_pos['size'] <= 0:
+                logger.info(f"No existing position to close for {pair}, skipping close.")
+                return
+
+            close_side = 'sell' if my_pos['side'] == 'LONG' else 'buy'
+            logger.info(f"Closing position for {pair} due to target close. side={my_pos['side']}, size={my_pos['size']}")
+            await self.exchange.create_order(pair, 'market', close_side, my_pos['size'])
+            return
+
         # Logic for SELL (Shorting vs Closing)
         if side == "SELL":
             # If we have a LONG position, this SELL is a CLOSE/REDUCE -> Always Allowed
@@ -252,27 +263,54 @@ class Coffin299CopyStrategy:
 
         if not price or price <= 0:
             price = await self.exchange.get_market_price(pair)
-        logger.info("Starting JPY Rate Polling Task...")
-        url = "https://api.exchangerate-api.com/v4/latest/USD"
-        
-        while True:
-            try:
-                async with aiohttp.ClientSession() as session:
-                    async with session.get(url) as resp:
-                        if resp.status == 200:
-                            data = await resp.json()
-                            rate = data.get('rates', {}).get('JPY')
-                            if rate:
-                                self.jpy_rate = float(rate)
-                                logger.info(f"Updated USD/JPY Rate: {self.jpy_rate}")
-                            else:
-                                logger.warning("JPY rate not found in API response")
-                        else:
-                            logger.warning(f"Failed to fetch exchange rate: {resp.status}")
-            except Exception as e:
-                logger.error(f"Error fetching exchange rate: {e}")
-                
-            await asyncio.sleep(3600) # 1 hour
+        if not price or price <= 0:
+            logger.warning(f"Invalid price for {pair}, skipping trade.")
+            return
+
+        order_side = 'buy' if side == 'BUY' else 'sell'
+
+        # Decide trade amount
+        amount = 0.0
+
+        # If we already have a position in this symbol
+        my_pos = next((p for p in current_positions if p['symbol'] == symbol), None)
+
+        if my_pos:
+            desired_side = 'LONG' if side == 'BUY' else 'SHORT'
+
+            # If already aligned with target side, do nothing
+            if my_pos['side'] == desired_side:
+                logger.info(f"Already aligned with target on {pair} ({desired_side}), skipping trade.")
+                return
+
+            # If opposite, first close existing position fully
+            close_side = 'sell' if my_pos['side'] == 'LONG' else 'buy'
+            logger.info(f"Closing existing position on {pair} before following target. Current side={my_pos['side']}, target side={desired_side}.")
+            await self.exchange.create_order(pair, 'market', close_side, my_pos['size'])
+
+            # Refresh positions after close
+            current_positions = await self.exchange.get_positions()
+            my_pos = next((p for p in current_positions if p['symbol'] == symbol), None)
+
+        # At this point we either have no position or just closed it
+
+        # Position sizing based on config copy_trading.max_quantity (JPY) and jpy_rate, 1x-style
+        max_jpy = self.config['strategy'].get('copy_trading', {}).get('max_quantity', 0)
+        if max_jpy <= 0:
+            logger.info(f"max_quantity <= 0 for {pair}, skipping open trade.")
+            return
+
+        # Convert JPY budget to USDC notionally using current jpy_rate
+        jpy_rate = self.jpy_rate if self.jpy_rate > 0 else 150.0
+        usd_budget = max_jpy / jpy_rate
+        amount = usd_budget / price
+
+        if amount <= 0:
+            logger.warning(f"Calculated trade amount is non-positive for {pair}, skipping.")
+            return
+
+        logger.info(f"Executing copy trade: {side} {amount} {pair} @ {price} ({reason})")
+        await self.exchange.create_order(pair, 'market', order_side, amount)
 
     async def periodic_report_loop(self):
         logger.info("Starting Periodic Report Task (Every 30 mins)...")

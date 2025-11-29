@@ -464,8 +464,6 @@ class Hyperliquid(BaseExchange):
             logger.error(f"Hyperliquid Order Failed: {e}")
             return None
 
-    async def close(self):
-        pass
     async def get_leaderboard_top_traders(self, limit=5):
         """
         Fetches top traders from Hyperliquid stats API.
