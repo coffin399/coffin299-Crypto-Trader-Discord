@@ -110,7 +110,9 @@ class Coffin299CopyStrategy:
                 # Close by trading opposite direction
                 close_action = "SELL" if my_pos['side'] == 'LONG' else "BUY"
                 current_price = all_prices.get(symbol)
-                await self.execute_copy_trade(symbol, close_action, f"Closing {symbol} (not in target)", price=current_price)
+                
+                # Use close_position=True to close fully
+                await self.execute_copy_trade(symbol, close_action, f"Closing {symbol} (not in target)", price=current_price, close_position=True)
                 await asyncio.sleep(0.1)
     
     async def run_aggregate_mode(self):
@@ -250,69 +252,6 @@ class Coffin299CopyStrategy:
 
         if not price or price <= 0:
             price = await self.exchange.get_market_price(pair)
-            
-        if not price or price <= 0:
-            logger.error(f"Cannot execute trade for {pair}: Invalid Price {price}")
-            return
-        
-        logger.info(f"EXECUTING COPY TRADE: {side} {pair} @ {price} ({reason})")
-        
-        order_side = side.lower()
-        
-        # Calculate Amount based on max_quantity (JPY)
-        max_quantity_jpy = self.config['strategy'].get('copy_trading', {}).get('max_quantity', 1500)
-        
-        # 1. Convert JPY to USD
-        usd_value = max_quantity_jpy / self.jpy_rate
-        
-        # 2. Convert USD to Token Amount (BEFORE checking duplicates)
-        # Amount = USD / Price
-        amount = usd_value / price
-        
-        # 🔵 デバッグ用ログ: 計算過程を記録
-        logger.debug(f"Amount Calculation: max_quantity_jpy={max_quantity_jpy}, jpy_rate={self.jpy_rate}, usd_value={usd_value:.4f}, price={price}, amount={amount}")
-        
-        # Rounding - 8桁に変更（小額ポジションの精度向上）
-        amount = round(amount, 8)
-        
-        if amount <= 0:
-            logger.warning(f"❌ Calculated amount is too small or invalid: {amount} (JPY: {max_quantity_jpy}, Price: {price}, USD: {usd_value:.4f})")
-            return
-        
-        # 3. 既に同方向のポジションを持っているかチェック
-        if my_pos:
-            current_side = my_pos['side'] # LONG or SHORT
-            current_size = my_pos.get('size', 0)
-            
-            # ❌ サイズが0または無効な場合はポジションが実質的に存在しないため、重複チェックをスキップ
-            if current_size <= 0:
-                logger.debug(f"Position exists but size is 0 for {pair}, allowing trade.")
-            # ✅ ロングポジションを既に持っていて、さらにBUYしようとしている場合
-            elif side == 'BUY' and current_side == 'LONG':
-                if current_size >= amount * 0.8: # 80% threshold for size
-                    logger.info(f"Already have LONG position for {pair} (Size: {current_size:.8f} vs Target: {amount:.8f}). Skipping.")
-                    return
-            # ✅ ショートポジションを既に持っていて、さらにSELLしようとしている場合
-            elif side == 'SELL' and current_side == 'SHORT':
-                if current_size >= amount * 0.8:
-                    logger.info(f"Already have SHORT position for {pair} (Size: {current_size:.8f} vs Target: {amount:.8f}). Skipping.")
-                    return
-        
-        try:
-            order = await self.exchange.create_order(pair, 'market', order_side, amount)
-            if order:
-                logger.info(f"Trade Executed: {order}")
-                
-                # Calculate JPY Value (Actual)
-                total_jpy = amount * price * self.jpy_rate
-                
-                await self.notifier.notify_trade(side, pair, price, str(amount), reason, total_jpy=total_jpy)
-            else:
-                logger.error("Trade Execution Failed")
-        except Exception as e:
-            logger.error(f"Trade Execution Error: {e}")
-
-    async def update_jpy_rate_loop(self):
         logger.info("Starting JPY Rate Polling Task...")
         url = "https://api.exchangerate-api.com/v4/latest/USD"
         
