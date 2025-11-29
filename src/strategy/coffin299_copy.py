@@ -239,7 +239,19 @@ class Coffin299CopyStrategy:
 
             close_side = 'sell' if my_pos['side'] == 'LONG' else 'buy'
             logger.info(f"Closing position for {pair} due to target close. side={my_pos['side']}, size={my_pos['size']}")
+            if not price or price <= 0:
+                price = await self.exchange.get_market_price(pair)
+            jpy_rate = self.jpy_rate if self.jpy_rate > 0 else 150.0
+            total_jpy = my_pos['size'] * price * jpy_rate
             await self.exchange.create_order(pair, 'market', close_side, my_pos['size'])
+            await self.notifier.notify_trade(
+                "SELL" if close_side == 'sell' else "BUY",
+                pair,
+                price,
+                my_pos['size'],
+                reason,
+                total_jpy=total_jpy,
+            )
             return
 
         # Logic for SELL (Shorting vs Closing)
@@ -311,6 +323,16 @@ class Coffin299CopyStrategy:
 
         logger.info(f"Executing copy trade: {side} {amount} {pair} @ {price} ({reason})")
         await self.exchange.create_order(pair, 'market', order_side, amount)
+        jpy_rate = self.jpy_rate if self.jpy_rate > 0 else 150.0
+        total_jpy = amount * price * jpy_rate
+        await self.notifier.notify_trade(
+            side,
+            pair,
+            price,
+            amount,
+            reason,
+            total_jpy=total_jpy,
+        )
 
     async def periodic_report_loop(self):
         logger.info("Starting Periodic Report Task (Every 30 mins)...")
