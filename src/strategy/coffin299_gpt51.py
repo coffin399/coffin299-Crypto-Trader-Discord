@@ -48,6 +48,10 @@ class Coffin299GPT51Strategy:
         self.start_base_equiv = None
         self.max_drawdown_pct = config['strategy'].get('gpt51_max_drawdown_pct', 0.5)
 
+        # Aggressiveness controls
+        self.breakout_lookback = int(config['strategy'].get('gpt51_breakout_lookback', 20))
+        self.atr_multiplier = float(config['strategy'].get('gpt51_atr_multiplier', 2.0))
+
         self.last_report_time = datetime.utcnow()
         self.report_interval = timedelta(minutes=30)
 
@@ -176,7 +180,7 @@ class Coffin299GPT51Strategy:
         up_trend = price > ema_slow and ema_fast > ema_slow
         down_trend = price < ema_slow and ema_fast < ema_slow
 
-        lookback = 20
+        lookback = max(5, self.breakout_lookback)
         recent = df.iloc[-lookback:]
         breakout_long = up_trend and price >= recent["high"].max()
         breakout_short = down_trend and price <= recent["low"].min()
@@ -229,7 +233,7 @@ class Coffin299GPT51Strategy:
         if risk_usd <= 0:
             return
 
-        stop_distance = atr * 2.0
+        stop_distance = atr * self.atr_multiplier
         if stop_distance <= 0:
             return
 

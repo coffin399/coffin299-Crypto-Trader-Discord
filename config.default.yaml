@@ -76,6 +76,8 @@ strategy:
   gpt51_base: "ETH"
   gpt51_risk_per_trade: 0.01
   gpt51_max_drawdown_pct: 0.5
+  gpt51_breakout_lookback: 20   # candles to look back for breakout
+  gpt51_atr_multiplier: 2.0     # stop distance = ATR * multiplier
   
   # Copy Trading Settings (type == "copy_leaderboard")
   copy_trading:
