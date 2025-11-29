@@ -20,6 +20,9 @@ class DiscordNotifier:
         self._last_successful_send = None
         self._reconnect_attempts = 0
         self._max_reconnect_attempts = 5
+        self._send_failure_count = 0
+        self._circuit_open_until = None
+        self._max_buffer_size = config['discord'].get('max_buffer_size', 200)
         
         if self.enabled and self.token:
             self._initialize_client()
@@ -117,7 +120,23 @@ class DiscordNotifier:
         while not self._is_shutting_down:
             try:
                 await asyncio.sleep(3)
+                # Check circuit breaker window
+                if self._circuit_open_until:
+                    now = datetime.utcnow()
+                    if now < self._circuit_open_until:
+                        continue
+                    else:
+                        logger.info("🟢 Circuit breaker window elapsed, resuming buffered sends")
+                        self._circuit_open_until = None
+                        self._send_failure_count = 0
+
                 if self.notification_buffer:
+                    # Enforce buffer size limit to avoid unbounded growth during outages
+                    if len(self.notification_buffer) > self._max_buffer_size:
+                        overflow = len(self.notification_buffer) - self._max_buffer_size
+                        logger.warning(f"🟡 Notification buffer exceeded limit ({self._max_buffer_size}), dropping {overflow} oldest entries")
+                        self.notification_buffer = self.notification_buffer[overflow:]
+
                     # Flush buffer
                     to_send = self.notification_buffer[:]
                     self.notification_buffer = []
@@ -132,10 +151,17 @@ class DiscordNotifier:
                             try:
                                 await channel.send(embeds=chunk)
                                 self._last_successful_send = datetime.utcnow()
+                                self._send_failure_count = 0
+                                self._circuit_open_until = None
                             except Exception as e:
+                                self._send_failure_count += 1
+                                backoff_seconds = min(60, 5 * self._send_failure_count)
                                 logger.error(f"🔴 Failed to send buffered embeds: {e}")
-                                # Re-add failed chunks to buffer
+                                logger.warning(f"🟡 Backing off buffered sends for {backoff_seconds} seconds after {self._send_failure_count} consecutive failures")
+                                self._circuit_open_until = datetime.utcnow() + timedelta(seconds=backoff_seconds)
+                                # Re-add failed chunks to buffer and break to respect backoff window
                                 self.notification_buffer.extend(chunk)
+                                break
                     else:
                         # Channel not available, put messages back
                         logger.warning(f"🟡 Channel not available, re-buffering {len(to_send)} notifications")
@@ -202,6 +228,15 @@ class DiscordNotifier:
     async def send_embed(self, channel_key, title, description, color=0x00ff00, fields=None):
         if not self.enabled: return
         
+        if self._circuit_open_until:
+            now = datetime.utcnow()
+            if now < self._circuit_open_until:
+                logger.warning("🟡 Circuit breaker open - skipping embed send")
+                return
+            else:
+                self._circuit_open_until = None
+                self._send_failure_count = 0
+
         channel = await self._get_channel(channel_key)
         if not channel: 
             logger.warning(f"🟡 Cannot send embed - channel '{channel_key}' not available")
@@ -225,10 +260,16 @@ class DiscordNotifier:
         try:
             await channel.send(embed=embed)
             self._last_successful_send = datetime.utcnow()
+            self._send_failure_count = 0
+            self._circuit_open_until = None
         except discord.errors.HTTPException as e:
             logger.error(f"🔴 Discord HTTP error sending embed: {e.status} - {e.text}")
         except Exception as e:
+            self._send_failure_count += 1
+            backoff_seconds = min(60, 5 * self._send_failure_count)
             logger.error(f"🔴 Failed to send embed: {e}")
+            logger.warning(f"🟡 Backing off single embed sends for {backoff_seconds} seconds after {self._send_failure_count} consecutive failures")
+            self._circuit_open_until = datetime.utcnow() + timedelta(seconds=backoff_seconds)
 
     async def notify_trade(self, action, pair, price, quantity, reason, pnl=None, currency="JPY", total_jpy=None):
         """
