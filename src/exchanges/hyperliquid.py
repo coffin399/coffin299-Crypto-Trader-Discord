@@ -411,18 +411,50 @@ class Hyperliquid(BaseExchange):
         # Use CCXT for standardized data fetching
         try:
             import ccxt.async_support as ccxt
-            
+
             if not hasattr(self, 'ccxt_client'):
                 self.ccxt_client = ccxt.hyperliquid({
                     'enableRateLimit': True,
-                    'options': {'defaultType': 'future'}
+                    'options': {'defaultType': 'future'},
                 })
-            
-            ohlcv = await self.ccxt_client.fetch_ohlcv(pair, timeframe, since, limit)
+
+            # Load and cache markets once
+            if not hasattr(self, 'ccxt_markets') or not self.ccxt_markets:
+                try:
+                    self.ccxt_markets = await self.ccxt_client.load_markets()
+                except Exception as e:
+                    logger.warning(f"Failed to load Hyperliquid markets via CCXT: {e}")
+                    return []
+
+            markets = self.ccxt_markets
+
+            # Resolve CCXT symbol. Some markets may be like 'AVAX/USDC:USDC'.
+            ccxt_symbol = pair if pair in markets else None
+
+            if not ccxt_symbol:
+                try:
+                    base, quote = pair.split('/')
+                except ValueError:
+                    logger.debug(f"Invalid pair format for OHLCV: {pair}")
+                    return []
+
+                # Try to find a market with matching base/quote
+                for m in markets.values():
+                    if m.get('base') == base and m.get('quote') == quote:
+                        ccxt_symbol = m.get('symbol')
+                        break
+
+            if not ccxt_symbol:
+                # Pair not supported on this Hyperliquid instance
+                logger.debug(f"Pair {pair} not found in Hyperliquid CCXT markets, skipping OHLCV fetch.")
+                return []
+
+            ohlcv = await self.ccxt_client.fetch_ohlcv(ccxt_symbol, timeframe, since, limit)
             return ohlcv
-            
+
         except Exception as e:
-            logger.error(f"CCXT Fetch Failed: {e}")
+            # Downgrade to warning to avoid log spam when a single pair repeatedly fails
+            logger.warning(f"CCXT Fetch Failed for {pair}: {e}")
             return []
             
     async def close(self):
